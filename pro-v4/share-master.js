@@ -23,9 +23,14 @@ export async function main(ns) {
             let maxRam = ns.getServerMaxRam(server);
             let usedRam = ns.getServerUsedRam(server);
 
-            // Sisakan 64GB di home agar script utama (stock-master, orchestrator) tidak crash
+            // Sisakan 64GB di server biasa agar tidak crash.
+            // KHUSUS untuk HOME server (tempat HWGW berjalan), kita WAJIB menyisakan RAM dalam jumlah super besar.
+            // HWGW tidur butuh 0 RAM, tetapi saat bangun ia butuh menembakkan 4 payload secara buas bersamaan.
+            // Mari kita sisakan minimal 50% atau 1 TB (sebagai batas bawah) pada "home", 
+            // biarkan Pserv- yang bekerja keras untuk share.
             if (server === "home") {
-                maxRam -= 64;
+                let safetyMargin = Math.max(maxRam * 0.80, 1024); // Sisakan 70% RAM atau minimal 1.024 GB
+                maxRam -= safetyMargin;
             }
 
             let freeRam = maxRam - usedRam;
