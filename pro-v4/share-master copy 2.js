@@ -1,7 +1,3 @@
-/* normal buat Nuke server
-    -- pserv include pserv server
-    -- all include pserv server and home server
-*/
 /** @param {NS} ns */
 export async function main(ns) {
     ns.disableLog("ALL");
@@ -42,7 +38,7 @@ export async function main(ns) {
 
             // Jika mode --all aktif dan kita mengeksekusi di home, sisakan RAM untuk HWGW
             if (server === "home") {
-                let safetyMargin = 128; // Instruksi user: Cukup sisakan 128GB mutlak
+                let safetyMargin = Math.max(maxRam * 0.80, 1024); // Sisakan 80% RAM atau minimal 1.024 GB
                 maxRam -= safetyMargin;
             }
 
