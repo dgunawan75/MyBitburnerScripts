@@ -9,15 +9,6 @@ export async function main(ns) {
     ns.print(" Tujuan: Memaksimalkan Reputasi Faksi    ");
     ns.print("=========================================");
 
-    const useAll = ns.args.includes("--all");
-    const usePserv = ns.args.includes("--pserv") || useAll;
-
-    ns.print("=========================================");
-    ns.print(" FACTION SHARE MASTER (PRO-V4) ENGINE    ");
-    ns.print(" Tujuan: Memaksimalkan Reputasi Faksi    ");
-    ns.print(` Mode: ${useAll ? "ALL (Termasuk HOME)" : usePserv ? "PSERV + NPC (Tanpa HOME)" : "NPC ONLY (Nuked Server)"}`);
-    ns.print("=========================================");
-
     const SHARE_SCRIPT = "/workers/share.js";
     const SHARE_RAM = ns.getScriptRam(SHARE_SCRIPT);
 
@@ -29,25 +20,20 @@ export async function main(ns) {
             // Abaikan server yang belum di root
             if (!ns.hasRootAccess(server)) continue;
 
-            // Filter server berdasarkan mode argumen CLI
-            if (server === "home" && !useAll) continue;
-            if (server.startsWith("pserv-") && !usePserv) continue;
+            // INSTRUKSI USER: Jangan gunakan "home" maupun "pserv-" (server yang dibeli)
+            // Biarkan semua RAM premium tersebut fokus untuk memompa uang di HWGW.
+            // Share power BISA murni dijalankan dari ratusan server NPC yang sudah di-Nuke.
+            if (server === "home" || server.startsWith("pserv-")) continue;
 
             let maxRam = ns.getServerMaxRam(server);
             let usedRam = ns.getServerUsedRam(server);
-
-            // Jika mode --all aktif dan kita mengeksekusi di home, sisakan RAM untuk HWGW
-            if (server === "home") {
-                let safetyMargin = Math.max(maxRam * 0.80, 1024); // Sisakan 80% RAM atau minimal 1.024 GB
-                maxRam -= safetyMargin;
-            }
 
             let freeRam = maxRam - usedRam;
             let threads = Math.floor(freeRam / SHARE_RAM);
 
             if (threads > 0) {
                 // Kopi script share ke node (jika belum ada)
-                if (server !== "home" && !ns.fileExists(SHARE_SCRIPT, server)) {
+                if (!ns.fileExists(SHARE_SCRIPT, server)) {
                     await ns.scp(SHARE_SCRIPT, server, "home");
                 }
 

@@ -1,21 +1,19 @@
 /** @param {NS} ns **/
 
 const LIMIT = 25;
-const UPGRADE_RATIO = 2;     // upgrade minimal 2x RAM
+const LEAP_FACTOR = 8;       // Syarat lompatan: RAM baru minimal 8x lipat lebih besar dari server lama (untuk menghindari pemborosan siklus x2)
+const MIN_BUY_RAM = 8;       // Minimal eksekusi server awal
 
-// Hard limit maksimum RAM yang boleh dibeli untuk tiap server tambahan
-// (Mencegah script menghamburkan triliunan dolar untuk upgrade yang tidak pernah dipakai semuanya)
-// 1048576 GB = 1 Petabyte (PB). Ini batas wajar untuk Late Game sebelum masuk bursa.
+// 1048576 GB = 1 Petabyte (PB). Batas waras sebelum semua uang disuntik ke pasar saham.
 const MAX_RAM_CAP = 1048576;
 
 export async function manageServers(ns) {
 
-    // Membaca pengaturan dari Orchestrator
-    let config = { serverBudget: 0.25, enableServerBuy: true, enableServerUpgrade: true }; // Standar default gagal
+    // 1. Membaca sabda dari Orchestrator (Aturan Budgeting Fase)
+    let config = { serverBudget: 0.25, enableServerBuy: true, enableServerUpgrade: true };
     if (ns.fileExists("/pro-v1/config.txt")) {
         try {
             let parsed = JSON.parse(ns.read("/pro-v1/config.txt"));
-            // Gunakan nilai dari file jika ada, jika tidak ada gunakan default
             config.serverBudget = parsed.serverBudget !== undefined ? parsed.serverBudget : 0.25;
             config.enableServerBuy = parsed.enableServerBuy !== undefined ? parsed.enableServerBuy : true;
             config.enableServerUpgrade = parsed.enableServerUpgrade !== undefined ? parsed.enableServerUpgrade : true;
@@ -23,99 +21,94 @@ export async function manageServers(ns) {
     }
 
     let money = ns.getServerMoneyAvailable("home");
+    // "Uang Panas" yang diizinkan untuk dibakar membeli server
     let usableMoney = money * config.serverBudget;
 
     let servers = ns.getPurchasedServers();
 
-    let maxRam = ns.getPurchasedServerMaxRam()
+    // ===============================================
+    // CARI KEMAMPUAN DANA MAXIMUM KITA SEKARANG
+    // ===============================================
+    let maxAffordableRam = getBestRam(ns, usableMoney);
 
-    // =========================
-    // CARI RAM TERBAIK
-    // =========================
+    // Paksa patuhi Plafon Atas (Pecah limit max ke 1PB)
+    if (maxAffordableRam > MAX_RAM_CAP) maxAffordableRam = MAX_RAM_CAP;
 
-    let bestRam = getBestRam(ns, usableMoney)
+    if (maxAffordableRam < MIN_BUY_RAM) return; // Terlalu miskin untuk beli apa-apa
+    let cost = ns.getPurchasedServerCost(maxAffordableRam);
 
-    if (bestRam < 8) return
 
-    let cost = ns.getPurchasedServerCost(bestRam)
-
-    /* for debug
-        ns.tprint("Money:", money)  
-        ns.tprint("Best RAM:", bestRam)
-        ns.tprint("Cost:", cost)
-    */
-    // =========================
-    // BELI SERVER BARU
-    // =========================
-
+    // ===============================================
+    // FASE 1: BELI SERVER BARU (Jika kuota 25 slot belum penuh)
+    // ===============================================
     if (servers.length < LIMIT) {
+        if (!config.enableServerBuy) return;
 
-        if (!config.enableServerBuy) return  // add line
+        // Jangan membeli recehan jika sudah mid-game (misal kita sudah sanggup beli Terabyte)
+        let name = "pserv-" + servers.length;
 
-        if (usableMoney < cost) return
-
-        let name = "pserv-" + Date.now()
-
-        ns.purchaseServer(name, bestRam)
-
-        ns.tprint("🟢 Bought server:", name, "RAM:", bestRam)
-
-        return
+        ns.purchaseServer(name, maxAffordableRam);
+        ns.tprint(`🟢 [Leapfrog] Membeli server baru: ${name} dengan Kapasitas ${ns.formatRam(maxAffordableRam)} (Bakar: $${ns.formatNumber(cost)})`);
+        return;
     }
 
-    // =========================
-    // UPGRADE SERVER TERKECIL
-    // =========================
 
-    let smallest = null
-    let smallestRam = Infinity
+    // ===============================================
+    // FASE 2: LEAPFROGGING UPGRADE
+    // ===============================================
+    if (!config.enableServerUpgrade) return;
 
+    let smallest = null;
+    let smallestRam = Infinity;
 
+    // Cari target server paling cupu (paling kecil) di jaringan
     for (let s of servers) {
-
-        let ram = ns.getServerMaxRam(s)
-
+        let ram = ns.getServerMaxRam(s);
         if (ram < smallestRam) {
-            smallestRam = ram
-            smallest = s
+            smallestRam = ram;
+            smallest = s;
         }
     }
 
-    let nextRam = smallestRam * UPGRADE_RATIO
+    // Jika server paling cupu kita saja kapasitasnya sudah mencapai plafon MAX (Misal 1 PB), ngapain capek-capek cari ganti? Tamat.
+    if (smallestRam >= MAX_RAM_CAP) return;
 
-    // Batasi upgrade agar jangan beli server mahal yang tidak penting jika sudah 1 Petabyte ke atas.
-    if (nextRam > MAX_RAM_CAP) return
-    if (nextRam > maxRam) return
+    // LEAPFROG LOGIC INTI:
+    // Apakah "Kemampuan Beli Tertinggi" kita saat ini jauh lebih kuat dari server paling lemah?
+    // Kita menuntut minimal lompat LEAP_FACTOR (misal: 8x lipat). 
+    // Kecuali jika uang kita mencium batas MAX_RAM_CAP (mentok plafon) dan RAM itu lebih besar dari server lama, hajar saja sisa *gap*-nya!
+    let targetLompatanMinimum = smallestRam * LEAP_FACTOR;
 
-    let upgradeCost = ns.getPurchasedServerCost(nextRam)
+    if (maxAffordableRam >= targetLompatanMinimum || (maxAffordableRam === MAX_RAM_CAP && maxAffordableRam > smallestRam)) {
 
-    if (!config.enableServerUpgrade) return // add line
+        // Peringatan Eksekusi Mati (cabut nyawa semua script di server tumbal)
+        ns.killall(smallest);
+        ns.deleteServer(smallest);
 
-    if (usableMoney < upgradeCost) return
+        // Lahirkan kembali ia di raga yang lebih epik
+        ns.purchaseServer(smallest, maxAffordableRam);
 
-    ns.killall(smallest)
-
-    ns.deleteServer(smallest)
-
-    ns.purchaseServer(smallest, nextRam)
-
-    ns.tprint("🟡 Upgraded", smallest, "to", nextRam)
-
+        let oldFormat = ns.formatRam(smallestRam);
+        let newFormat = ns.formatRam(maxAffordableRam);
+        ns.tprint(`� [MEGA LOMPATAN] 🪦 Menumbalkan ${smallest} (${oldFormat}) -> 💫 Reinkarnasi wujud baru: ${newFormat} (Bakar Anggaran: $${ns.formatNumber(cost)})`);
+    }
 }
 
+
+/** Mengembalikan Ukuran RAM Terbesar yang Sanggup Dibeli Dompet Kita */
 function getBestRam(ns, money) {
+    let ram = 8;
+    let max = ns.getPurchasedServerMaxRam();
 
-    let ram = 8
-    let max = ns.getPurchasedServerMaxRam()
-
+    // Uji terus dikali 2 hingga mentok dompet atau mentok standar dewa game
     while (ram * 2 <= max) {
-
-        let cost = ns.getPurchasedServerCost(ram * 2)
-
-        if (cost > money) break
-
-        ram *= 2
+        let cost = ns.getPurchasedServerCost(ram * 2);
+        if (cost > money) break;
+        ram *= 2;
     }
 
-    return ram
+    // Pengaman pelit (kalau beli 8GB aja belum sanggup)
+    if (ns.getPurchasedServerCost(ram) > money) return 0;
+
+    return ram;
 }

@@ -96,8 +96,8 @@ async function getWorkers(ns, config) {
     }
 
     // Purchased servers
+    const pservs = ns.getPurchasedServers(); // <-- definisikan di sini
     if (config.USE_PURCHASED_SERVERS) {
-        const pservs = ns.getPurchasedServers();
         for (const server of pservs) {
             workers.push({
                 host: server,
@@ -109,7 +109,7 @@ async function getWorkers(ns, config) {
     }
 
     // Hacking servers (optional - servers yang sudah di-root)
-    if (ns.args.includes("--hacknet")) {
+    if (ns.args.includes("--hacknet")) { // bisa diganti --hacked
         const allServers = scanAllServers(ns);
         for (const server of allServers) {
             if (server !== "home" &&
@@ -193,7 +193,8 @@ async function parallelExecute(ns, workers, scripts, target, baseDelay, config, 
     for (const scriptConfig of scripts) {
         const script = scriptConfig.script;
         const scriptRam = ns.getScriptRam(script);
-        let remainingThreads = scriptConfig.threads || Infinity;
+        // Jika threads tidak ditentukan, jalankan sebanyak mungkin (Infinity)
+        let remainingThreads = scriptConfig.threads !== undefined ? scriptConfig.threads : Infinity;
 
         // Sort workers by available RAM (descending)
         const sortedWorkers = [...workers].sort((a, b) => {
@@ -234,7 +235,7 @@ async function parallelExecute(ns, workers, scripts, target, baseDelay, config, 
         }
 
         // Update scriptConfig with actual threads executed
-        scriptConfig.executedThreads = (scriptConfig.threads || Infinity) - remainingThreads;
+        scriptConfig.executedThreads = (scriptConfig.threads !== undefined ? scriptConfig.threads : Infinity) - remainingThreads;
     }
 
     return executions;
@@ -449,7 +450,7 @@ function displayPrepStatus(ns, target, sec, minSec, money, maxMoney) {
 
 function displayBatchStatus(ns, stats, activeBatches, config) {
     const runtime = (Date.now() - stats.startTime) / 1000;
-    const bps = stats.batchesStarted / runtime;
+    const bps = runtime > 0 ? stats.batchesStarted / runtime : 0;
     const estimatedMoney = stats.batchesStarted * config.STEAL_PERCENT * 1000000000; // Rough estimate
 
     ns.clearLog();
@@ -462,14 +463,17 @@ function displayBatchStatus(ns, stats, activeBatches, config) {
 
 async function autoAdjustConfig(ns, workers, batchDesign, config, stats) {
     // Auto-adjust based on performance
-    const avgBatchTime = (Date.now() - stats.startTime) / stats.batchesStarted;
+    const runtime = (Date.now() - stats.startTime) / 1000;
+    if (runtime < 10 || stats.batchesStarted === 0) return;
+
+    const avgBatchTime = runtime / stats.batchesStarted * 1000; // in ms
     const theoreticalTime = batchDesign.times.weaken;
 
     if (avgBatchTime > theoreticalTime * 1.2) {
         // Too slow, reduce concurrent batches
         config.MAX_CONCURRENT_BATCHES = Math.max(1, config.MAX_CONCURRENT_BATCHES - 1);
         ns.print(`⚠️ Adjusting concurrency down to ${config.MAX_CONCURRENT_BATCHES}`);
-    } else if (avgBatchTime < theoreticalTime * 0.8) {
+    } else if (avgBatchTime < theoreticalTime * 0.8 && config.MAX_CONCURRENT_BATCHES < 50) {
         // Too fast, can handle more
         config.MAX_CONCURRENT_BATCHES = Math.min(50, config.MAX_CONCURRENT_BATCHES + 1);
         ns.print(`⚡ Adjusting concurrency up to ${config.MAX_CONCURRENT_BATCHES}`);
