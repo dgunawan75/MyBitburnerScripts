@@ -2,7 +2,7 @@
 export async function main(ns) {
     ns.disableLog("ALL");
     ns.clearLog();
-    ns.tail();
+    ns.ui.openTail();
 
     // Pastikan user memberikan target yang valid
     const target = ns.args[0];
@@ -140,7 +140,13 @@ function calculateBatch(ns, target, percentToSteal) {
     server.moneyAvailable = maxMoney;
 
     // 1. Berapa thread Hack yang butuh untuk curi persenan uang?
-    let hackAmtPerThread = ns.formulas.hacking.hackPercent(server, player);
+    let hackAmtPerThread = 0;
+    try {
+        hackAmtPerThread = ns.formulas.hacking.hackPercent(server, player);
+    } catch {
+        // Fallback jika tidak punya Formulas.exe
+        hackAmtPerThread = ns.hackAnalyze(target);
+    }
 
     if (hackAmtPerThread <= 0) {
         ns.print(`❌ ERROR LOGIKA: Hacking Level Anda (${player.skills.hacking}) masih di bawah batas minimal atau belum cukup jago untuk me-hack ${target} (${server.requiredHackingSkill}).`);
@@ -164,7 +170,14 @@ function calculateBatch(ns, target, percentToSteal) {
     // 3. Setelah uang dicuri x%, tinggal (1-x)%.
     // Berapa thread Grow untuk membesarkannya kembali ke 100%?
     server.moneyAvailable = maxMoney * (1 - percentToSteal);
-    let tGrow = ns.formulas.hacking.growThreads(server, player, maxMoney);
+    let tGrow = 0;
+    try {
+        tGrow = ns.formulas.hacking.growThreads(server, player, maxMoney);
+    } catch {
+        // Fallback tanpa Formulas.exe (growthAnalyze butuh multiplier, multiplier = max / sisa)
+        let growMult = 1 / (1 - percentToSteal);
+        tGrow = Math.ceil(ns.growthAnalyze(target, growMult));
+    }
 
     // Saat uang di-grow, Security naik 0.004 per thread
     let securityIncreaseFromGrow = tGrow * 0.004;
@@ -193,10 +206,12 @@ async function runBatchDispatcher(ns, target, batchData, ramPerBatch, tDelay) {
     ns.print(`⚡ Max Safe Concurrent Batches: ${maxBatches}`);
 
     while (true) {
-        // Cek sisa RAM di Home
-        let homeRam = ns.getServerMaxRam("home") - ns.getServerUsedRam("home") - 64;
+        let totalAvailableRam = workers.reduce((sum, w) => {
+            let reserve = w === "home" ? Math.min(64, ns.getServerMaxRam("home") * 0.1) : 0;
+            return sum + (ns.getServerMaxRam(w) - ns.getServerUsedRam(w) - reserve);
+        }, 0);
 
-        if (homeRam < ramPerBatch) {
+        if (totalAvailableRam < ramPerBatch) {
             await ns.sleep(100);
             continue; // Tunggu sampai ada batch yang selesai dan RAM kembali
         }
@@ -222,13 +237,45 @@ async function runBatchDispatcher(ns, target, batchData, ramPerBatch, tDelay) {
         let delay_W1 = timeEnd_W1 - timeWeaken;
         let delay_H = timeEnd_H - timeHack;
 
-        // TEMBAK PELURU! (Penting: script harus ditambahkan identitas unik agar bisa dijalankan berkali-kali secara paralel. Kita pakai batchNumber)
-        ns.print(`[BATCH ${batchNumber}] Sedang Meluncur...`);
+        // Fungsi kecil untuk mengeksekusi payload yg tersebar
+        let execPayload = (script, threads, target, delay, batchNum) => {
+            if (threads <= 0) return true;
 
-        if (batchData.tHack > 0) ns.exec("/pro-v3/payload/hack.js", "home", batchData.tHack, target, delay_H, batchNumber);
-        if (batchData.tWeak1 > 0) ns.exec("/pro-v3/payload/weaken1.js", "home", batchData.tWeak1, target, delay_W1, batchNumber);
-        if (batchData.tGrow > 0) ns.exec("/pro-v3/payload/grow.js", "home", batchData.tGrow, target, delay_G, batchNumber);
-        if (batchData.tWeak2 > 0) ns.exec("/pro-v3/payload/weaken2.js", "home", batchData.tWeak2, target, delay_W2, batchNumber);
+            let pservs = ns.getPurchasedServers();
+            let workers = [...pservs, "home"].sort((a, b) => {
+                let reserveA = a === "home" ? Math.min(64, ns.getServerMaxRam("home") * 0.1) : 0;
+                let reserveB = b === "home" ? Math.min(64, ns.getServerMaxRam("home") * 0.1) : 0;
+                let ramA = ns.getServerMaxRam(a) - ns.getServerUsedRam(a) - reserveA;
+                let ramB = ns.getServerMaxRam(b) - ns.getServerUsedRam(b) - reserveB;
+                return ramB - ramA;
+            });
+
+            for (let w of workers) {
+                let reserve = w === "home" ? Math.min(64, ns.getServerMaxRam("home") * 0.1) : 0;
+                let avail = ns.getServerMaxRam(w) - ns.getServerUsedRam(w) - reserve;
+                let needed = threads * ns.getScriptRam(script);
+
+                if (avail >= needed) {
+                    ns.scp(script, w, "home");
+                    ns.exec(script, w, threads, target, delay, batchNum);
+                    return true;
+                }
+            }
+            return false;
+        };
+
+        ns.print(`[BATCH ${batchNumber}] Sedang Meluncur (Tersebar)...`);
+
+        let successH = execPayload("/pro-v3/payload/hack.js", batchData.tHack, target, delay_H, batchNumber);
+        let successW1 = execPayload("/pro-v3/payload/weaken1.js", batchData.tWeak1, target, delay_W1, batchNumber);
+        let successG = execPayload("/pro-v3/payload/grow.js", batchData.tGrow, target, delay_G, batchNumber);
+        let successW2 = execPayload("/pro-v3/payload/weaken2.js", batchData.tWeak2, target, delay_W2, batchNumber);
+
+        if (!successH || !successW1 || !successG || !successW2) {
+            ns.print(`⚠️ Memori tidak cukup untuk 1 Batch utuh. Menunggu...`);
+            await ns.sleep(100);
+            continue;
+        }
 
         batchNumber += 1;
 

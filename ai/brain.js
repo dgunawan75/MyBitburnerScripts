@@ -3,7 +3,6 @@ import { rootServer } from "/modules/rooter.js"
 import { getTargets } from "/modules/target-engine-v2.js"
 import { getWorkers } from "/modules/worker-manager.js"
 import { deployHack } from "/modules/hack-engine.js"
-import { manageServers } from "/modules/smart-server-manager.js"
 
 /** @param {NS} ns **/
 export async function main(ns) {
@@ -19,7 +18,7 @@ export async function main(ns) {
         }
 
         // manage purchased servers
-        await manageServers(ns)
+        // await manageServers(ns) // (Dihapus. Dipindahkan ke skrip mandiri agar tidak rebutan uang di awal game)
 
         // ======================
         // TARGET ENGINE v2

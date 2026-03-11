@@ -1,7 +1,7 @@
 /** @param {NS} ns **/
 export async function main(ns) {
     ns.disableLog("ALL");
-    ns.tail();
+    ns.ui.openTail();
 
     // Cek akses
     if (!ns.stock.hasTIXAPIAccess()) {

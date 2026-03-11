@@ -1,7 +1,7 @@
 /** @param {NS} ns **/
 export async function main(ns) {
     ns.disableLog("ALL");
-    ns.tail(); // Membuka jendela log agar Anda bisa melihat aktivitas bot
+    ns.ui.openTail(); // Membuka jendela log agar Anda bisa melihat aktivitas bot
 
     // Pengecekan Syarat Dasar Trading Otomatis
     if (!ns.stock.hasTIXAPIAccess()) {

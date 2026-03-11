@@ -2,7 +2,7 @@
 export async function main(ns) {
     ns.disableLog("ALL");
     ns.clearLog();
-    ns.tail();
+    ns.ui.openTail();
 
     ns.print("Memulai Auto-Backdoor Scanner...");
 

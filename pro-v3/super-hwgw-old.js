@@ -1,11 +1,11 @@
-/** @param {NS} ns */
+﻿/** @param {NS} ns */
 export async function main(ns) {
     ns.disableLog("ALL");
     ns.clearLog();
-    ns.ui.openTail();
+    ns.tail();
 
     ns.print(`=========================================`);
-    ns.print(` 🏆 SUPER HWGW ENGINE (AUTO-TARGETING)   `);
+    ns.print(` ≡ƒÅå SUPER HWGW ENGINE (AUTO-TARGETING)   `);
     ns.print(`=========================================`);
 
     // Konfigurasi Delay Presisi (dalam milidetik)
@@ -22,13 +22,13 @@ export async function main(ns) {
         let bestTarget = getBestTarget(ns);
 
         if (!bestTarget) {
-            ns.print("⏳ Tidak ada target yang bisa di-hack saat ini. Menunggu...");
+            ns.print("ΓÅ│ Tidak ada target yang bisa di-hack saat ini. Menunggu...");
             await ns.sleep(60000);
             continue;
         }
 
         if (currentTarget !== bestTarget) {
-            ns.print(`\n🎯 TARGET BARU DITEMUKAN: ${bestTarget.toUpperCase()}`);
+            ns.print(`\n≡ƒÄ» TARGET BARU DITEMUKAN: ${bestTarget.toUpperCase()}`);
             ns.print(`   Beralih dari ${currentTarget || "Tidak Ada"} ke ${bestTarget}`);
             currentTarget = bestTarget;
 
@@ -38,8 +38,8 @@ export async function main(ns) {
 
         ns.clearLog();
         ns.print(`=========================================`);
-        ns.print(` 🏆 SUPER HWGW ENGINE BEKERJA            `);
-        ns.print(` 🎯 TARGET AKTIF: ${currentTarget.toUpperCase()}`);
+        ns.print(` ≡ƒÅå SUPER HWGW ENGINE BEKERJA            `);
+        ns.print(` ≡ƒÄ» TARGET AKTIF: ${currentTarget.toUpperCase()}`);
         ns.print(`=========================================`);
 
         // 2. FASE PERHITUNGAN BATCH
@@ -52,40 +52,30 @@ export async function main(ns) {
             batchData = calculateBatch(ns, currentTarget, percentToSteal);
             if (batchData) {
                 let ramPerBatch = (batchData.tHack * HACK_RAM) + (batchData.tWeak1 * WEAK_RAM) + (batchData.tGrow * GROW_RAM) + (batchData.tWeak2 * WEAK_RAM);
+                // Pastikan Home masih sanggup menembak minimal 1 batch jika semua server lain mati
+                let homePservMax = Math.max(
+                    ns.getServerMaxRam("home") - 128,
+                    ...ns.getPurchasedServers().map(s => ns.getServerMaxRam(s))
+                );
 
-                // Karena eksekusi sudah tersebar (distributed), kita bisa menembak batch 
-                // asalkan total RAM di seluruh jaringan cukup untuk menampungnya.
-                let homeReserve = Math.min(128, ns.getServerMaxRam("home") * 0.1); // Sisakan maks 128GB ATAU 10% dari total RAM Home
-                let totalNetworkRam = Math.max(0, ns.getServerMaxRam("home") - homeReserve);
-                let pservs = ns.getPurchasedServers();
-                for (let p of pservs) {
-                    totalNetworkRam += ns.getServerMaxRam(p);
-                }
-
-                if (ramPerBatch <= totalNetworkRam) {
-                    break; // Ukuran batch ini muat di jaringan kita, bungkus!
+                if (ramPerBatch <= homePservMax) {
+                    break; // Ukuran batch ini muat di server kita, bungkus!
                 }
             }
             percentToSteal -= 0.05; // Kurangi persentase curian
-
-            // Failsafe: Jika persentase curian sudah terlalu kecil (< 5%), batalkan kalkulasi ini
-            if (percentToSteal <= 0.01) {
-                batchData = null;
-                break;
-            }
         }
 
         if (!batchData) {
-            ns.print(`❌ ERROR: Gagal kalkulasi batch untuk ${currentTarget}. Mencoba target lain dalam 1 menit...`);
+            ns.print(`Γ¥î ERROR: Gagal kalkulasi batch untuk ${currentTarget}. Mencoba target lain dalam 1 menit...`);
             currentTarget = null; // Paksa cari target baru di loop berikutnya
             await ns.sleep(60000);
             continue;
         }
 
         let ramPerBatch = (batchData.tHack * HACK_RAM) + (batchData.tWeak1 * WEAK_RAM) + (batchData.tGrow * GROW_RAM) + (batchData.tWeak2 * WEAK_RAM);
-        ns.print(`💰 Target Curian : ${(percentToSteal * 100).toFixed(0)}% (${ns.formatNumber(ns.getServerMaxMoney(currentTarget) * percentToSteal)})`);
-        ns.print(`⚙️ RAM 1 Batch   : ${ns.formatNumber(ramPerBatch)} GB`);
-        ns.print(`🧵 Threads/Batch : H(${batchData.tHack}) W1(${batchData.tWeak1}) G(${batchData.tGrow}) W2(${batchData.tWeak2})`);
+        ns.print(`≡ƒÆ░ Target Curian : ${(percentToSteal * 100).toFixed(0)}% (${ns.formatNumber(ns.getServerMaxMoney(currentTarget) * percentToSteal)})`);
+        ns.print(`ΓÜÖ∩╕Å RAM 1 Batch   : ${ns.formatNumber(ramPerBatch)} GB`);
+        ns.print(`≡ƒº╡ Threads/Batch : H(${batchData.tHack}) W1(${batchData.tWeak1}) G(${batchData.tGrow}) W2(${batchData.tWeak2})`);
 
         // 3. FASE PENEMBAKAN (DISPATCH PHASE) - Berjalan selama 10 Menit sebelum re-evaluasi target
         await runBatchDispatcher(ns, currentTarget, batchData, ramPerBatch, T_DELAY, 600000);
@@ -114,20 +104,10 @@ function getBestTarget(ns) {
         server.hackDifficulty = server.minDifficulty;
         server.moneyAvailable = maxMoney;
 
-        // Gunakan Fallback jika tidak punya Formulas.exe
-        let hackTime = 0;
-        let hackChance = 0;
-        let hackPercent = 0;
-
-        try {
-            hackTime = ns.formulas.hacking.hackTime(server, player);
-            hackChance = ns.formulas.hacking.hackChance(server, player);
-            hackPercent = ns.formulas.hacking.hackPercent(server, player);
-        } catch {
-            hackTime = ns.getHackTime(target);
-            hackChance = ns.hackAnalyzeChance(target);
-            hackPercent = ns.hackAnalyze(target);
-        }
+        // Gunakan Formulas API untuk mensimulasikan "Uang Per Detik" (Profitability Score)
+        let hackTime = ns.formulas.hacking.hackTime(server, player);
+        let hackChance = ns.formulas.hacking.hackChance(server, player);
+        let hackPercent = ns.formulas.hacking.hackPercent(server, player);
 
         if (hackTime === 0 || hackPercent === 0) continue;
 
@@ -195,10 +175,7 @@ async function prepServer(ns, target) {
 
         for (let w of workers) {
             let ram = ns.getServerMaxRam(w) - ns.getServerUsedRam(w);
-            if (w === "home") {
-                let reserve = Math.min(128, ns.getServerMaxRam("home") * 0.1);
-                ram -= reserve; // Sisakan 10% (max 128GB) di home untuk skrip lain
-            }
+            if (w === "home") ram -= 128; // Sisakan 128GB di home untuk keamanan extra
 
             let threads = Math.floor(ram / 1.75);
             if (threads > 0) {
@@ -209,11 +186,11 @@ async function prepServer(ns, target) {
         }
 
         if (totalThreads > 0) {
-            ns.print(`🚀 PREP MASSAL ${isWeaken ? "Weaken" : "Grow"} (${totalThreads} trds)`);
-            ns.print(`⏳ Mode Tidur. Menunggu ${ns.tFormat(waitTime)}...`);
+            ns.print(`≡ƒÜÇ PREP MASSAL ${isWeaken ? "Weaken" : "Grow"} (${totalThreads} trds)`);
+            ns.print(`ΓÅ│ Mode Tidur. Menunggu ${ns.tFormat(waitTime)}...`);
             await ns.sleep(waitTime + 1000);
         } else {
-            ns.print("💤 Seluruh RAM penuh. Menunggu 60 dtk...");
+            ns.print("≡ƒÆñ Seluruh RAM penuh. Menunggu 60 dtk...");
             await ns.sleep(60000);
         }
     }
@@ -230,12 +207,7 @@ function calculateBatch(ns, target, percentToSteal) {
     let maxMoney = server.moneyMax;
     server.moneyAvailable = maxMoney;
 
-    let hackAmtPerThread = 0;
-    try {
-        hackAmtPerThread = ns.formulas.hacking.hackPercent(server, player);
-    } catch {
-        hackAmtPerThread = ns.hackAnalyze(target);
-    }
+    let hackAmtPerThread = ns.formulas.hacking.hackPercent(server, player);
     if (hackAmtPerThread <= 0) return null;
 
     let tHack = Math.floor(percentToSteal / hackAmtPerThread);
@@ -248,15 +220,7 @@ function calculateBatch(ns, target, percentToSteal) {
     let tWeak1 = Math.ceil(securityIncreaseFromHack / 0.05);
 
     server.moneyAvailable = maxMoney * (1 - percentToSteal);
-
-    let tGrow = 0;
-    try {
-        tGrow = ns.formulas.hacking.growThreads(server, player, maxMoney);
-    } catch {
-        let growMult = 1 / (1 - percentToSteal);
-        tGrow = ns.growthAnalyze(target, growMult);
-    }
-    tGrow = Math.ceil(tGrow);
+    let tGrow = Math.ceil(ns.formulas.hacking.growThreads(server, player, maxMoney));
 
     // Safety padding for grow
     tGrow = Math.ceil(tGrow * 1.05);
@@ -284,16 +248,15 @@ async function runBatchDispatcher(ns, target, batchData, ramPerBatch, tDelay, du
         pservs = ns.getPurchasedServers();
         // Cari server yang paling lega RAM-nya (prioritaskan pserv, baru home di akhir)
         let workers = [...pservs, "home"].sort((a, b) => {
-            let ramA = ns.getServerMaxRam(a) - ns.getServerUsedRam(a) - (a === "home" ? Math.min(128, ns.getServerMaxRam("home") * 0.1) : 0);
-            let ramB = ns.getServerMaxRam(b) - ns.getServerUsedRam(b) - (b === "home" ? Math.min(128, ns.getServerMaxRam("home") * 0.1) : 0);
+            let ramA = ns.getServerMaxRam(a) - ns.getServerUsedRam(a) - (a === "home" ? 128 : 0);
+            let ramB = ns.getServerMaxRam(b) - ns.getServerUsedRam(b) - (b === "home" ? 128 : 0);
             return ramB - ramA;
         });
 
-        // Karena kita menggunakan pengiriman terpecah (Distributed), 
-        // kita evaluasi total RAM di seluruh jaringan, bukan cuma di 1 server terbaik.
-        let totalAvailableRam = workers.reduce((sum, w) => sum + (ns.getServerMaxRam(w) - ns.getServerUsedRam(w) - (w === "home" ? Math.min(128, ns.getServerMaxRam("home") * 0.1) : 0)), 0);
+        let bestWorker = workers[0];
+        let availableRam = ns.getServerMaxRam(bestWorker) - ns.getServerUsedRam(bestWorker) - (bestWorker === "home" ? 128 : 0);
 
-        if (totalAvailableRam < ramPerBatch) {
+        if (availableRam < ramPerBatch) {
             await ns.sleep(100);
             continue;
         }
@@ -312,38 +275,16 @@ async function runBatchDispatcher(ns, target, batchData, ramPerBatch, tDelay, du
         let delay_W1 = timeEnd_W1 - timeWeaken;
         let delay_H = timeEnd_H - timeHack;
 
-        // Fungsi kecil untuk mencari server dan mengeksekusi payload
-        let execPayload = (script, threads, target, delay, batchNum) => {
-            if (threads <= 0) return true;
+        ns.print(`[BATCH ${batchNumber}] Ditembakkan ke -> ${bestWorker}`);
 
-            for (let w of workers) {
-                let avail = ns.getServerMaxRam(w) - ns.getServerUsedRam(w) - (w === "home" ? 128 : 0);
-                let needed = threads * ns.getScriptRam(script);
-
-                if (avail >= needed) {
-                    ns.exec(script, w, threads, target, delay, batchNum);
-                    return true;
-                }
-            }
-            return false; // Gagal menemukan server yang muat untuk payload ini
-        };
-
-        ns.print(`[BATCH ${batchNumber}] Ditembakkan tersebar...`);
-
-        let successH = execPayload("/pro-v3/payload/hack.js", batchData.tHack, target, delay_H, batchNumber);
-        let successW1 = execPayload("/pro-v3/payload/weaken1.js", batchData.tWeak1, target, delay_W1, batchNumber);
-        let successG = execPayload("/pro-v3/payload/grow.js", batchData.tGrow, target, delay_G, batchNumber);
-        let successW2 = execPayload("/pro-v3/payload/weaken2.js", batchData.tWeak2, target, delay_W2, batchNumber);
-
-        if (!successH || !successW1 || !successG || !successW2) {
-            ns.print(`⚠️ Memori jaringan tidak cukup untuk 1 Batch utuh secara tersebar. Menunggu...`);
-            await ns.sleep(100);
-            continue;
-        }
+        if (batchData.tHack > 0) ns.exec("/pro-v3/payload/hack.js", bestWorker, batchData.tHack, target, delay_H, batchNumber);
+        if (batchData.tWeak1 > 0) ns.exec("/pro-v3/payload/weaken1.js", bestWorker, batchData.tWeak1, target, delay_W1, batchNumber);
+        if (batchData.tGrow > 0) ns.exec("/pro-v3/payload/grow.js", bestWorker, batchData.tGrow, target, delay_G, batchNumber);
+        if (batchData.tWeak2 > 0) ns.exec("/pro-v3/payload/weaken2.js", bestWorker, batchData.tWeak2, target, delay_W2, batchNumber);
 
         batchNumber += 1;
         await ns.sleep(tDelay * 4);
     }
 
-    ns.print(`⏰ Siklus ${ns.tFormat(durationMs)} selesai. Mencari target baru...`);
+    ns.print(`ΓÅ░ Siklus ${ns.tFormat(durationMs)} selesai. Mencari target baru...`);
 }

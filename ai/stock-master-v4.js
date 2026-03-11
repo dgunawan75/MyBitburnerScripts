@@ -1,7 +1,7 @@
 /** @param {NS} ns **/
 export async function main(ns) {
     ns.disableLog("ALL");
-    ns.tail();
+    ns.ui.openTail();
 
     if (!ns.stock.hasTIXAPIAccess() || !ns.stock.has4SDataTIXAPI()) {
         ns.tprint("ERROR: Butuh TIX API Access & 4S Market Data TIX API!");

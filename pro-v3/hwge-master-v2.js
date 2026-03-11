@@ -2,7 +2,7 @@
 export async function main(ns) {
     ns.disableLog("ALL");
     ns.clearLog();
-    ns.tail();
+    ns.ui.openTail();
 
     const target = ns.args[0];
     const useAllServers = ns.args[1] === "--all" || true; // Default true
