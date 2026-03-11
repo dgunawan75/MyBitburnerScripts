@@ -37,22 +37,41 @@ export async function main(ns) {
 
     ns.print("🟢 Target siap. Menghitung Matematika Formulas API...");
 
-    // 2. FASE PERHITUNGAN BATCH (MATH PHASE)
-    // Menghitung berapa persisnya thread Hack, Weaken, dan Grow yang dibutuhkan untuk mencuri X% uang.
-    // Kita targetkan mencuri 50% max money per kalinya (agar sisa uang masih cukup untuk dicloning dengan efisien).
-    const batchData = calculateBatch(ns, target, 0.50);
+    let percentToSteal = 0.50; // Default 50%
+    let batchData = null;
+    let ramPerBatch = 0;
+
+    while (percentToSteal > 0.05) {
+        batchData = calculateBatch(ns, target, percentToSteal);
+        if (batchData) {
+            ramPerBatch = (batchData.tHack * HACK_RAM) + (batchData.tWeak1 * WEAK_RAM) + (batchData.tGrow * GROW_RAM) + (batchData.tWeak2 * WEAK_RAM);
+
+            let homeReserve = Math.min(64, ns.getServerMaxRam("home") * 0.1);
+            let pservs = ns.getPurchasedServers();
+            let maxSingleRam = Math.max(
+                ns.getServerMaxRam("home") - homeReserve,
+                ...pservs.map(s => ns.getServerMaxRam(s))
+            );
+
+            if (ramPerBatch <= maxSingleRam) {
+                break; // Ukuran batch muat, bungkus!
+            }
+        }
+        percentToSteal -= 0.05;
+
+        // Failsafe
+        if (percentToSteal <= 0.01) {
+            batchData = null;
+            break;
+        }
+    }
 
     if (!batchData) {
         ns.print("❌ ERROR: Kalkulasi batch gagal. RAM atau Skill Hacking mungkin tidak memadai.");
         return;
     }
 
-    // Hitung total RAM yang dibutuhkan untuk 1 siklus HWGW penuh
-    const ramPerBatch = (batchData.tHack * HACK_RAM) +
-        (batchData.tWeak1 * WEAK_RAM) +
-        (batchData.tGrow * GROW_RAM) +
-        (batchData.tWeak2 * WEAK_RAM);
-
+    ns.print(`💰 Target Curian         : ${(percentToSteal * 100).toFixed(0)}%`);
     ns.print(`⚙️ Kebutuhan RAM 1 Batch : ${ns.formatNumber(ramPerBatch)} GB`);
     ns.print(`🧵 Threads per Batch     : H(${batchData.tHack}) W1(${batchData.tWeak1}) G(${batchData.tGrow}) W2(${batchData.tWeak2})`);
 
@@ -206,12 +225,10 @@ async function runBatchDispatcher(ns, target, batchData, ramPerBatch, tDelay) {
     ns.print(`⚡ Max Safe Concurrent Batches: ${maxBatches}`);
 
     while (true) {
-        let totalAvailableRam = workers.reduce((sum, w) => {
-            let reserve = w === "home" ? Math.min(64, ns.getServerMaxRam("home") * 0.1) : 0;
-            return sum + (ns.getServerMaxRam(w) - ns.getServerUsedRam(w) - reserve);
-        }, 0);
+        let bestWorker = workers[0];
+        let availableRam = ns.getServerMaxRam(bestWorker) - ns.getServerUsedRam(bestWorker) - (bestWorker === "home" ? Math.min(64, ns.getServerMaxRam("home") * 0.1) : 0);
 
-        if (totalAvailableRam < ramPerBatch) {
+        if (availableRam < ramPerBatch) {
             await ns.sleep(100);
             continue; // Tunggu sampai ada batch yang selesai dan RAM kembali
         }
@@ -222,60 +239,25 @@ async function runBatchDispatcher(ns, target, batchData, ramPerBatch, tDelay) {
         let timeWeaken = ns.getWeakenTime(target);
 
         // KUNCI HWGW: Keempat aksi harus MENDARAT dalam urutan H -> W1 -> G -> W2 dengan jarak 50ms.
-        // Karena Waktu Eksekusi berbeda (Weaken terlama, Hack tercepat), kita memundurkan waktu peluncurannya (Delay).
-
-        // Asumsi: Kita atur W2 mendarat di "Waktu Weaken" penuh.
         let timeEnd_W2 = timeWeaken;                 // Peluru ke-4 mendarat
         let timeEnd_G = timeEnd_W2 - tDelay;        // Peluru ke-3 mendarat 50ms sebelumnya
         let timeEnd_W1 = timeEnd_G - tDelay;         // Peluru ke-2 mendarat 50ms sebelumnya
         let timeEnd_H = timeEnd_W1 - tDelay;        // Peluru ke-1 mendarat 50ms sebelumnya
 
         // Hitung Delay Meluncur (Kapan mereka harus dilemparkan dari server home)
-        // Delay Meluncur = Waktu Target Mendarat - Waktu Tempuh Peluru
         let delay_W2 = timeEnd_W2 - timeWeaken;
         let delay_G = timeEnd_G - timeGrow;
         let delay_W1 = timeEnd_W1 - timeWeaken;
         let delay_H = timeEnd_H - timeHack;
 
-        // Fungsi kecil untuk mengeksekusi payload yg tersebar
-        let execPayload = (script, threads, target, delay, batchNum) => {
-            if (threads <= 0) return true;
+        ns.print(`[BATCH ${batchNumber}] Ditembakkan ke -> ${bestWorker}`);
 
-            let pservs = ns.getPurchasedServers();
-            let workers = [...pservs, "home"].sort((a, b) => {
-                let reserveA = a === "home" ? Math.min(64, ns.getServerMaxRam("home") * 0.1) : 0;
-                let reserveB = b === "home" ? Math.min(64, ns.getServerMaxRam("home") * 0.1) : 0;
-                let ramA = ns.getServerMaxRam(a) - ns.getServerUsedRam(a) - reserveA;
-                let ramB = ns.getServerMaxRam(b) - ns.getServerUsedRam(b) - reserveB;
-                return ramB - ramA;
-            });
+        ns.scp(["/pro-v3/payload/hack.js", "/pro-v3/payload/weaken1.js", "/pro-v3/payload/grow.js", "/pro-v3/payload/weaken2.js"], bestWorker, "home");
 
-            for (let w of workers) {
-                let reserve = w === "home" ? Math.min(64, ns.getServerMaxRam("home") * 0.1) : 0;
-                let avail = ns.getServerMaxRam(w) - ns.getServerUsedRam(w) - reserve;
-                let needed = threads * ns.getScriptRam(script);
-
-                if (avail >= needed) {
-                    ns.scp(script, w, "home");
-                    ns.exec(script, w, threads, target, delay, batchNum);
-                    return true;
-                }
-            }
-            return false;
-        };
-
-        ns.print(`[BATCH ${batchNumber}] Sedang Meluncur (Tersebar)...`);
-
-        let successH = execPayload("/pro-v3/payload/hack.js", batchData.tHack, target, delay_H, batchNumber);
-        let successW1 = execPayload("/pro-v3/payload/weaken1.js", batchData.tWeak1, target, delay_W1, batchNumber);
-        let successG = execPayload("/pro-v3/payload/grow.js", batchData.tGrow, target, delay_G, batchNumber);
-        let successW2 = execPayload("/pro-v3/payload/weaken2.js", batchData.tWeak2, target, delay_W2, batchNumber);
-
-        if (!successH || !successW1 || !successG || !successW2) {
-            ns.print(`⚠️ Memori tidak cukup untuk 1 Batch utuh. Menunggu...`);
-            await ns.sleep(100);
-            continue;
-        }
+        if (batchData.tHack > 0) ns.exec("/pro-v3/payload/hack.js", bestWorker, batchData.tHack, target, delay_H, batchNumber);
+        if (batchData.tWeak1 > 0) ns.exec("/pro-v3/payload/weaken1.js", bestWorker, batchData.tWeak1, target, delay_W1, batchNumber);
+        if (batchData.tGrow > 0) ns.exec("/pro-v3/payload/grow.js", bestWorker, batchData.tGrow, target, delay_G, batchNumber);
+        if (batchData.tWeak2 > 0) ns.exec("/pro-v3/payload/weaken2.js", bestWorker, batchData.tWeak2, target, delay_W2, batchNumber);
 
         batchNumber += 1;
 

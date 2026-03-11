@@ -53,17 +53,17 @@ export async function main(ns) {
             if (batchData) {
                 let ramPerBatch = (batchData.tHack * HACK_RAM) + (batchData.tWeak1 * WEAK_RAM) + (batchData.tGrow * GROW_RAM) + (batchData.tWeak2 * WEAK_RAM);
 
-                // Karena eksekusi sudah tersebar (distributed), kita bisa menembak batch 
-                // asalkan total RAM di seluruh jaringan cukup untuk menampungnya.
+                // Agar script bekerja layaknya "Mesin Fotokopi" (High Concurrency),
+                // 1 Batch HARUS muat di dalam 1 server secara utuh, sehingga kita bisa menembak puluhan/ratusan batch paralel.
                 let homeReserve = Math.min(128, ns.getServerMaxRam("home") * 0.1); // Sisakan maks 128GB ATAU 10% dari total RAM Home
-                let totalNetworkRam = Math.max(0, ns.getServerMaxRam("home") - homeReserve);
                 let pservs = ns.getPurchasedServers();
-                for (let p of pservs) {
-                    totalNetworkRam += ns.getServerMaxRam(p);
-                }
+                let maxSingleRam = Math.max(
+                    ns.getServerMaxRam("home") - homeReserve,
+                    ...pservs.map(s => ns.getServerMaxRam(s))
+                );
 
-                if (ramPerBatch <= totalNetworkRam) {
-                    break; // Ukuran batch ini muat di jaringan kita, bungkus!
+                if (ramPerBatch <= maxSingleRam) {
+                    break; // Ukuran batch ini muat di 1 server, pastikan bisa jalan paralel!
                 }
             }
             percentToSteal -= 0.05; // Kurangi persentase curian
@@ -289,11 +289,10 @@ async function runBatchDispatcher(ns, target, batchData, ramPerBatch, tDelay, du
             return ramB - ramA;
         });
 
-        // Karena kita menggunakan pengiriman terpecah (Distributed), 
-        // kita evaluasi total RAM di seluruh jaringan, bukan cuma di 1 server terbaik.
-        let totalAvailableRam = workers.reduce((sum, w) => sum + (ns.getServerMaxRam(w) - ns.getServerUsedRam(w) - (w === "home" ? Math.min(128, ns.getServerMaxRam("home") * 0.1) : 0)), 0);
+        let bestWorker = workers[0];
+        let availableRam = ns.getServerMaxRam(bestWorker) - ns.getServerUsedRam(bestWorker) - (bestWorker === "home" ? Math.min(128, ns.getServerMaxRam("home") * 0.1) : 0);
 
-        if (totalAvailableRam < ramPerBatch) {
+        if (availableRam < ramPerBatch) {
             await ns.sleep(100);
             continue;
         }
@@ -312,34 +311,12 @@ async function runBatchDispatcher(ns, target, batchData, ramPerBatch, tDelay, du
         let delay_W1 = timeEnd_W1 - timeWeaken;
         let delay_H = timeEnd_H - timeHack;
 
-        // Fungsi kecil untuk mencari server dan mengeksekusi payload
-        let execPayload = (script, threads, target, delay, batchNum) => {
-            if (threads <= 0) return true;
+        ns.print(`[BATCH ${batchNumber}] Ditembakkan ke -> ${bestWorker}`);
 
-            for (let w of workers) {
-                let avail = ns.getServerMaxRam(w) - ns.getServerUsedRam(w) - (w === "home" ? 128 : 0);
-                let needed = threads * ns.getScriptRam(script);
-
-                if (avail >= needed) {
-                    ns.exec(script, w, threads, target, delay, batchNum);
-                    return true;
-                }
-            }
-            return false; // Gagal menemukan server yang muat untuk payload ini
-        };
-
-        ns.print(`[BATCH ${batchNumber}] Ditembakkan tersebar...`);
-
-        let successH = execPayload("/pro-v3/payload/hack.js", batchData.tHack, target, delay_H, batchNumber);
-        let successW1 = execPayload("/pro-v3/payload/weaken1.js", batchData.tWeak1, target, delay_W1, batchNumber);
-        let successG = execPayload("/pro-v3/payload/grow.js", batchData.tGrow, target, delay_G, batchNumber);
-        let successW2 = execPayload("/pro-v3/payload/weaken2.js", batchData.tWeak2, target, delay_W2, batchNumber);
-
-        if (!successH || !successW1 || !successG || !successW2) {
-            ns.print(`⚠️ Memori jaringan tidak cukup untuk 1 Batch utuh secara tersebar. Menunggu...`);
-            await ns.sleep(100);
-            continue;
-        }
+        if (batchData.tHack > 0) ns.exec("/pro-v3/payload/hack.js", bestWorker, batchData.tHack, target, delay_H, batchNumber);
+        if (batchData.tWeak1 > 0) ns.exec("/pro-v3/payload/weaken1.js", bestWorker, batchData.tWeak1, target, delay_W1, batchNumber);
+        if (batchData.tGrow > 0) ns.exec("/pro-v3/payload/grow.js", bestWorker, batchData.tGrow, target, delay_G, batchNumber);
+        if (batchData.tWeak2 > 0) ns.exec("/pro-v3/payload/weaken2.js", bestWorker, batchData.tWeak2, target, delay_W2, batchNumber);
 
         batchNumber += 1;
         await ns.sleep(tDelay * 4);
