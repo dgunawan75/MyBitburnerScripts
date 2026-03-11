@@ -41,29 +41,26 @@ export async function main(ns) {
     let batchData = null;
     let ramPerBatch = 0;
 
-    while (percentToSteal > 0.05) {
+    while (percentToSteal >= 0.01) {
         batchData = calculateBatch(ns, target, percentToSteal);
         if (batchData) {
             ramPerBatch = (batchData.tHack * HACK_RAM) + (batchData.tWeak1 * WEAK_RAM) + (batchData.tGrow * GROW_RAM) + (batchData.tWeak2 * WEAK_RAM);
 
             let homeReserve = Math.min(64, ns.getServerMaxRam("home") * 0.1);
             let pservs = ns.getPurchasedServers();
-            let maxSingleRam = Math.max(
-                ns.getServerMaxRam("home") - homeReserve,
-                ...pservs.map(s => ns.getServerMaxRam(s))
-            );
+
+            let maxSingleRam = ns.getServerMaxRam("home") - homeReserve;
+            for (let p of pservs) {
+                if (ns.getServerMaxRam(p) > maxSingleRam) {
+                    maxSingleRam = ns.getServerMaxRam(p);
+                }
+            }
 
             if (ramPerBatch <= maxSingleRam) {
                 break; // Ukuran batch muat, bungkus!
             }
         }
-        percentToSteal -= 0.05;
-
-        // Failsafe
-        if (percentToSteal <= 0.01) {
-            batchData = null;
-            break;
-        }
+        percentToSteal -= 0.02;
     }
 
     if (!batchData) {

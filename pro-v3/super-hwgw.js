@@ -48,35 +48,35 @@ export async function main(ns) {
         let batchData = null;
 
         // Loop untuk mencari persentase curian ideal yang RAM-nya muat
-        while (percentToSteal > 0.05) {
+        while (percentToSteal >= 0.01) {
             batchData = calculateBatch(ns, currentTarget, percentToSteal);
             if (batchData) {
                 let ramPerBatch = (batchData.tHack * HACK_RAM) + (batchData.tWeak1 * WEAK_RAM) + (batchData.tGrow * GROW_RAM) + (batchData.tWeak2 * WEAK_RAM);
 
                 // Agar script bekerja layaknya "Mesin Fotokopi" (High Concurrency),
                 // 1 Batch HARUS muat di dalam 1 server secara utuh, sehingga kita bisa menembak puluhan/ratusan batch paralel.
-                let homeReserve = Math.min(128, ns.getServerMaxRam("home") * 0.1); // Sisakan maks 128GB ATAU 10% dari total RAM Home
+                let homeReserve = Math.min(128, ns.getServerMaxRam("home") * 0.1);
                 let pservs = ns.getPurchasedServers();
-                let maxSingleRam = Math.max(
-                    ns.getServerMaxRam("home") - homeReserve,
-                    ...pservs.map(s => ns.getServerMaxRam(s))
-                );
+
+                // Cari server terbesar yang kita miliki saat ini
+                let maxSingleRam = ns.getServerMaxRam("home") - homeReserve;
+                for (let p of pservs) {
+                    if (ns.getServerMaxRam(p) > maxSingleRam) {
+                        maxSingleRam = ns.getServerMaxRam(p);
+                    }
+                }
 
                 if (ramPerBatch <= maxSingleRam) {
-                    break; // Ukuran batch ini muat di 1 server, pastikan bisa jalan paralel!
+                    break; // Ukuran batch ini muat di 1 server tunggal
                 }
             }
-            percentToSteal -= 0.05; // Kurangi persentase curian
 
-            // Failsafe: Jika persentase curian sudah terlalu kecil (< 5%), batalkan kalkulasi ini
-            if (percentToSteal <= 0.01) {
-                batchData = null;
-                break;
-            }
+            // Jika masih terlalu besar, turunkan target curian pelan-pelan
+            percentToSteal -= 0.02;
         }
 
-        if (!batchData) {
-            ns.print(`❌ ERROR: Gagal kalkulasi batch untuk ${currentTarget}. Mencoba target lain dalam 1 menit...`);
+        if (!batchData || percentToSteal < 0.01) {
+            ns.print(`❌ ERROR: Gagal kalkulasi batch untuk ${currentTarget}. Mengecilkan target curian hingga 1% tetap gagal masuk ke dalam RAM Server tunggal terbesar. Mencoba target lain dalam 1 menit...`);
             currentTarget = null; // Paksa cari target baru di loop berikutnya
             await ns.sleep(60000);
             continue;
