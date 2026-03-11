@@ -128,15 +128,22 @@ function assignTasks(ns, gangInfo) {
             nTask = "Vigilante Justice";
             vigilanteAssigned++;
         }
-        // Aturan 3: Preman kroco (Cari modal awal)
+        // Aturan 3: Jika anggota masih sedikit (< 6), fokus utama adalah MENCARI RESPECT agar cepat bisa rekrut
+        else if (members.length < 6) {
+            if (avgStats < 250) nTask = "Mug People";
+            else nTask = "Terrorism"; // Terrorism memberikan Respect paling cepat
+        }
+        // Aturan 4: Preman kroco (Cari modal awal)
         else if (avgStats < 300) {
             nTask = "Mug People";
         }
-        // Aturan 4: Preman menengah (Cari modal lebih besar)
-        else if (avgStats < 700) {
-            nTask = "Strongarm Assassinations";
+        // Aturan 5: Preman menengah + Cari Respect Tambahan
+        else if (avgStats < 800) {
+            // Sepertiga anggota difokuskan cari respect, sisanya cari uang
+            if (Math.random() > 0.6) nTask = "Terrorism";
+            else nTask = "Strongarm Assassinations";
         }
-        // Aturan 5: Bandar Kelas Kakap (Mesin Uang Utama Miliaran)
+        // Aturan 6: Bandar Kelas Kakap (Mesin Uang Utama Miliaran)
         else {
             nTask = "Human Trafficking";
         }
