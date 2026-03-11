@@ -53,17 +53,26 @@ export async function main(ns) {
             }
         }
 
+        // Hitung total RAM jaringan
+        let totalNetworkRam = maxSingleRam;
+        for (let p of pservs) totalNetworkRam += ns.getServerMaxRam(p);
+
+        // Batasan Maksimum Batch Udara
+        let weakTime = ns.getWeakenTime(currentTarget);
+        let maxBatches = Math.floor(weakTime / (T_DELAY * 4));
+
         let percentToSteal = 0.50; // Default 50%
         let batchData = null;
+        let ramPerBatch = 0;
 
-        // Loop untuk mencari persentase curian ideal yang RAM-nya muat
+        // Loop untuk mencari persentase curian ideal yang RAM-nya muat di 1 server (Maksimalisasi rasio per batch)
         while (percentToSteal > 0.001) {
             batchData = calculateBatch(ns, currentTarget, percentToSteal);
             if (batchData) {
-                let ramPerBatch = (batchData.tHack * HACK_RAM) + (batchData.tWeak1 * WEAK_RAM) + (batchData.tGrow * GROW_RAM) + (batchData.tWeak2 * WEAK_RAM);
+                ramPerBatch = (batchData.tHack * HACK_RAM) + (batchData.tWeak1 * WEAK_RAM) + (batchData.tGrow * GROW_RAM) + (batchData.tWeak2 * WEAK_RAM);
 
                 if (ramPerBatch <= maxSingleRam) {
-                    break; // Ukuran batch ini muat di 1 server tunggal
+                    break;
                 }
             }
 
@@ -78,13 +87,20 @@ export async function main(ns) {
             continue;
         }
 
-        let ramPerBatch = (batchData.tHack * HACK_RAM) + (batchData.tWeak1 * WEAK_RAM) + (batchData.tGrow * GROW_RAM) + (batchData.tWeak2 * WEAK_RAM);
+        // Setelah ukuran batch ideal didapatkan, hitung berapa batch maksimum yang muat di total jaringan
+        let totalRamNeeded = ramPerBatch * maxBatches;
+        if (totalRamNeeded > totalNetworkRam) {
+            // Jika RAM jaringan tidak kuat menahan batas maksimum udara, kurangi peluru di udara agar setara dengan RAM
+            maxBatches = Math.floor(totalNetworkRam / ramPerBatch);
+        }
+
         ns.print(`💰 Target Curian : ${(percentToSteal * 100).toFixed(0)}% (${ns.formatNumber(ns.getServerMaxMoney(currentTarget) * percentToSteal)})`);
         ns.print(`⚙️ RAM 1 Batch   : ${ns.formatNumber(ramPerBatch)} GB`);
         ns.print(`🧵 Threads/Batch : H(${batchData.tHack}) W1(${batchData.tWeak1}) G(${batchData.tGrow}) W2(${batchData.tWeak2})`);
+        ns.print(`🚀 Max Concurrent: ${maxBatches} udara (Total RAM Reserve: ${ns.formatRam(maxBatches * ramPerBatch)})`);
 
-        // 3. FASE PENEMBAKAN (DISPATCH PHASE) - Berjalan selama 10 Menit sebelum re-evaluasi target
-        await runBatchDispatcher(ns, currentTarget, batchData, ramPerBatch, T_DELAY, 600000);
+        // 3. FASE PENEMBAKAN (DISPATCH PHASE) - Menembakkan siklus penuh hingga udara jenuh
+        await runBatchDispatcher(ns, currentTarget, batchData, ramPerBatch, T_DELAY, maxBatches);
     }
 }
 
@@ -266,18 +282,18 @@ function calculateBatch(ns, target, percentToSteal) {
 // ==========================================
 // FUNGSI 3: PENEMBAK (DISPATCHER)
 // ==========================================
-async function runBatchDispatcher(ns, target, batchData, ramPerBatch, tDelay, durationMs) {
+async function runBatchDispatcher(ns, target, batchData, ramPerBatch, tDelay) {
     let batchNumber = 1;
-    let startTime = Date.now();
 
-    // Copy payload ke semua pservs di awal dispatcher agar tidak spam SCP tiap milidetik
-    let pservs = ns.getPurchasedServers();
-    for (let p of pservs) {
-        ns.scp(["/pro-v3/payload/hack.js", "/pro-v3/payload/weaken1.js", "/pro-v3/payload/grow.js", "/pro-v3/payload/weaken2.js"], p, "home");
-    }
+    // Batas jumlah batch maksimum di udara agar siklus Weaken belum selesai duluan
+    let weakTime = ns.getWeakenTime(target);
+    let maxBatches = Math.floor(weakTime / (tDelay * 4));
 
-    while (Date.now() - startTime < durationMs) {
-        pservs = ns.getPurchasedServers();
+    ns.print(`⚡ Max Safe Concurrent Batches: ${maxBatches}`);
+
+    // Ganti loop waktu dengan loop per-siklus batch udara penuh (1 Full WeakTime Cycle)
+    while (batchNumber <= maxBatches) {
+        let pservs = ns.getPurchasedServers();
         // Cari server yang paling lega RAM-nya (prioritaskan pserv, baru home di akhir)
         let workers = [...pservs, "home"].sort((a, b) => {
             let ramA = ns.getServerMaxRam(a) - ns.getServerUsedRam(a) - (a === "home" ? Math.min(128, ns.getServerMaxRam("home") * 0.1) : 0);
@@ -285,10 +301,16 @@ async function runBatchDispatcher(ns, target, batchData, ramPerBatch, tDelay, du
             return ramB - ramA;
         });
 
-        let bestWorker = workers[0];
-        let availableRam = ns.getServerMaxRam(bestWorker) - ns.getServerUsedRam(bestWorker) - (bestWorker === "home" ? Math.min(128, ns.getServerMaxRam("home") * 0.1) : 0);
+        let bestWorker = null;
+        for (let w of workers) {
+            let availableRam = ns.getServerMaxRam(w) - ns.getServerUsedRam(w) - (w === "home" ? Math.min(128, ns.getServerMaxRam("home") * 0.1) : 0);
+            if (availableRam >= ramPerBatch) {
+                bestWorker = w;
+                break;
+            }
+        }
 
-        if (availableRam < ramPerBatch) {
+        if (!bestWorker) {
             await ns.sleep(100);
             continue;
         }
@@ -315,8 +337,9 @@ async function runBatchDispatcher(ns, target, batchData, ramPerBatch, tDelay, du
         if (batchData.tWeak2 > 0) ns.exec("/pro-v3/payload/weaken2.js", bestWorker, batchData.tWeak2, target, delay_W2, batchNumber);
 
         batchNumber += 1;
-        await ns.sleep(tDelay * 4);
+        await ns.sleep(tDelay * 4); // Tidur singkat antar-batch agar mendarat berurutan
     }
 
-    ns.print(`⏰ Siklus ${ns.tFormat(durationMs)} selesai. Mencari target baru...`);
+    ns.print(`⏰ Siklus penuh (${maxBatches} udara). Menunggu ${ns.tFormat(weakTime)} hingga mendarat...`);
+    await ns.sleep(weakTime + 500); // Tunggu sampai SEMUA peluru mendarat sebelum evaluasi uang target lagi
 }

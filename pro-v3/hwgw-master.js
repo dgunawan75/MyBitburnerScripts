@@ -47,33 +47,53 @@ export async function main(ns) {
         }
     }
 
+    // Hitung total RAM jaringan
+    let totalNetworkRam = maxSingleRam;
+    for (let p of pservs) totalNetworkRam += ns.getServerMaxRam(p);
+
+    // Batasan Maksimum Batch Udara
+    let weakTime = ns.getWeakenTime(target);
+    let maxBatches = Math.floor(weakTime / (T_DELAY * 4));
+
     let percentToSteal = 0.50; // Default 50%
     let batchData = null;
     let ramPerBatch = 0;
 
+    // Loop untuk mencari persentase curian ideal yang RAM-nya muat di 1 server (Maksimalisasi rasio per batch)
     while (percentToSteal > 0.001) {
         batchData = calculateBatch(ns, target, percentToSteal);
         if (batchData) {
             ramPerBatch = (batchData.tHack * HACK_RAM) + (batchData.tWeak1 * WEAK_RAM) + (batchData.tGrow * GROW_RAM) + (batchData.tWeak2 * WEAK_RAM);
 
+            // Pastikan Batch muat di 1 server
             if (ramPerBatch <= maxSingleRam) {
-                break; // Ukuran batch muat, bungkus!
+                break;
             }
         }
+
+        // Jika masih terlalu besar, turunkan target curian lebih agresif
         percentToSteal -= 0.01;
     }
 
     if (!batchData || percentToSteal <= 0.001) {
-        ns.print(`❌ ERROR: Gagal kalkulasi batch. Mengecilkan curian hingga 0.1% pun ttp memakan RAM melebihi ${ns.formatRam(maxSingleRam)} (Hacking Level Anda belum sanggup meretas ini).`);
+        ns.tprint(`❌ ERROR: Gagal kalkulasi batch. Curian 0.1% pun memakan RAM > ${ns.formatRam(maxSingleRam)}. Target terlalu berat.`);
         return;
     }
 
-    ns.print(`💰 Target Curian         : ${(percentToSteal * 100).toFixed(0)}%`);
-    ns.print(`⚙️ Kebutuhan RAM 1 Batch : ${ns.formatNumber(ramPerBatch)} GB`);
-    ns.print(`🧵 Threads per Batch     : H(${batchData.tHack}) W1(${batchData.tWeak1}) G(${batchData.tGrow}) W2(${batchData.tWeak2})`);
+    // Setelah ukuran batch ideal didapatkan, hitung berapa batch maksimum yang muat di total jaringan
+    let totalRamNeeded = ramPerBatch * maxBatches;
+    if (totalRamNeeded > totalNetworkRam) {
+        // Jika RAM jaringan tidak kuat menahan batas maksimum udara, kurangi peluru di udara agar setara dengan RAM
+        maxBatches = Math.floor(totalNetworkRam / ramPerBatch);
+    }
 
-    // 3. FASE PENEMBAKAN (DISPATCH PHASE)
-    await runBatchDispatcher(ns, target, batchData, ramPerBatch, T_DELAY);
+    ns.print(`💰 Target Curian : ${(percentToSteal * 100).toFixed(0)}%`);
+    ns.print(`⚙️ RAM 1 Batch   : ${ns.formatNumber(ramPerBatch)} GB`);
+    ns.print(`🧵 Threads/Batch : H(${batchData.tHack}) W1(${batchData.tWeak1}) G(${batchData.tGrow}) W2(${batchData.tWeak2})`);
+    ns.print(`🚀 Max Concurrent: ${maxBatches} udara (Total RAM Reserve: ${ns.formatRam(maxBatches * ramPerBatch)})`);
+
+    // 2. FASE PENEMBAKAN (DISPATCH PHASE)
+    await runBatchDispatcher(ns, target, batchData, ramPerBatch, T_DELAY, maxBatches);
 }
 
 // ==========================================
@@ -221,11 +241,25 @@ async function runBatchDispatcher(ns, target, batchData, ramPerBatch, tDelay) {
 
     ns.print(`⚡ Max Safe Concurrent Batches: ${maxBatches}`);
 
-    while (true) {
-        let bestWorker = workers[0];
-        let availableRam = ns.getServerMaxRam(bestWorker) - ns.getServerUsedRam(bestWorker) - (bestWorker === "home" ? Math.min(64, ns.getServerMaxRam("home") * 0.1) : 0);
+    while (batchNumber <= maxBatches) {
+        let pservs = ns.getPurchasedServers();
+        // Sort workers based on RAM available
+        let workers = [...pservs, "home"].sort((a, b) => {
+            let ramA = ns.getServerMaxRam(a) - ns.getServerUsedRam(a) - (a === "home" ? Math.min(64, ns.getServerMaxRam("home") * 0.1) : 0);
+            let ramB = ns.getServerMaxRam(b) - ns.getServerUsedRam(b) - (b === "home" ? Math.min(64, ns.getServerMaxRam("home") * 0.1) : 0);
+            return ramB - ramA;
+        });
 
-        if (availableRam < ramPerBatch) {
+        let bestWorker = null;
+        for (let w of workers) {
+            let availableRam = ns.getServerMaxRam(w) - ns.getServerUsedRam(w) - (w === "home" ? Math.min(64, ns.getServerMaxRam("home") * 0.1) : 0);
+            if (availableRam >= ramPerBatch) {
+                bestWorker = w;
+                break;
+            }
+        }
+
+        if (!bestWorker) {
             await ns.sleep(100);
             continue; // Tunggu sampai ada batch yang selesai dan RAM kembali
         }
@@ -257,8 +291,9 @@ async function runBatchDispatcher(ns, target, batchData, ramPerBatch, tDelay) {
         if (batchData.tWeak2 > 0) ns.exec("/pro-v3/payload/weaken2.js", bestWorker, batchData.tWeak2, target, delay_W2, batchNumber);
 
         batchNumber += 1;
-
-        // Tunggu sejenak sebelum menembakkan rombongan Batch berikutnya
-        await ns.sleep(tDelay * 4);
+        await ns.sleep(tDelay * 4); // Tidur singkat antar-batch
     }
+
+    ns.print(`⏰ Siklus penuh (${maxBatches} udara). Menunggu ${ns.tFormat(weakTime)} hingga mendarat...`);
+    await ns.sleep(weakTime + 500); // Tunggu semua peluru mendarat
 }
