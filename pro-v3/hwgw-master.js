@@ -37,34 +37,34 @@ export async function main(ns) {
 
     ns.print("🟢 Target siap. Menghitung Matematika Formulas API...");
 
+    let homeReserve = Math.min(64, ns.getServerMaxRam("home") * 0.1);
+    let pservs = ns.getPurchasedServers();
+
+    let maxSingleRam = ns.getServerMaxRam("home") - homeReserve;
+    for (let p of pservs) {
+        if (ns.getServerMaxRam(p) > maxSingleRam) {
+            maxSingleRam = ns.getServerMaxRam(p);
+        }
+    }
+
     let percentToSteal = 0.50; // Default 50%
     let batchData = null;
     let ramPerBatch = 0;
 
-    while (percentToSteal >= 0.01) {
+    while (percentToSteal > 0.001) {
         batchData = calculateBatch(ns, target, percentToSteal);
         if (batchData) {
             ramPerBatch = (batchData.tHack * HACK_RAM) + (batchData.tWeak1 * WEAK_RAM) + (batchData.tGrow * GROW_RAM) + (batchData.tWeak2 * WEAK_RAM);
-
-            let homeReserve = Math.min(64, ns.getServerMaxRam("home") * 0.1);
-            let pservs = ns.getPurchasedServers();
-
-            let maxSingleRam = ns.getServerMaxRam("home") - homeReserve;
-            for (let p of pservs) {
-                if (ns.getServerMaxRam(p) > maxSingleRam) {
-                    maxSingleRam = ns.getServerMaxRam(p);
-                }
-            }
 
             if (ramPerBatch <= maxSingleRam) {
                 break; // Ukuran batch muat, bungkus!
             }
         }
-        percentToSteal -= 0.02;
+        percentToSteal -= 0.01;
     }
 
-    if (!batchData) {
-        ns.print("❌ ERROR: Kalkulasi batch gagal. RAM atau Skill Hacking mungkin tidak memadai.");
+    if (!batchData || percentToSteal <= 0.001) {
+        ns.print(`❌ ERROR: Gagal kalkulasi batch. Mengecilkan curian hingga 0.1% pun ttp memakan RAM melebihi ${ns.formatRam(maxSingleRam)} (Hacking Level Anda belum sanggup meretas ini).`);
         return;
     }
 
