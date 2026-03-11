@@ -6,7 +6,9 @@ export async function main(ns) {
 
     // =============== KONFIGURASI ===============
     const T_DELAY = 50; // Jeda milidetik antar peluru agar tidak tabrakan (50ms sangat aman)
-    const TARGET = ns.args[0] || "n00dles"; // Bisa jalankan: run dist-hwgw.js foodnstuff
+
+    // Default Target Otomatis jika argumen kosong
+    const TARGET = ns.args[0] || getBestTarget(ns);
 
     // RAM Cost dari Script Payload
     const HACK_RAM = ns.getScriptRam("/pro-v3/payload/hack.js");
@@ -247,4 +249,34 @@ function calculateBatch(ns, target, steal) {
     let tWeak2 = Math.ceil((tGrow * 0.004) / 0.05);
 
     return { tHack, tWeak1, tGrow, tWeak2 };
+}
+
+// =====================================
+// HELPER: MENCARI OTOMATIS TARGET TERBAIK (RATIO MONEY/TIME)
+// =====================================
+function getBestTarget(ns) {
+    let best = "n00dles";
+    let bestScore = 0;
+
+    for (let s of getWorkers(ns)) {
+        if (!ns.hasRootAccess(s)) continue;
+
+        let maxMoney = ns.getServerMaxMoney(s);
+        if (maxMoney <= 0) continue;
+
+        // Jangan menargetkan server militer endgame jika Hacking Level kita masih terlalu rendah
+        // Karena waktu tempuhnya akan menjadi puluhan menit dan merusak siklus udara HWGW
+        let requiredHack = ns.getServerRequiredHackingLevel(s);
+        if (requiredHack > ns.getHackingLevel() / 2) continue; // Hanya target server yang bisa kita kuasai dengan cepat
+
+        let weakenTime = ns.getWeakenTime(s);
+        let score = maxMoney / weakenTime;
+
+        if (score > bestScore) {
+            bestScore = score;
+            best = s;
+        }
+    }
+
+    return best;
 }
