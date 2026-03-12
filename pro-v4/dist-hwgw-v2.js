@@ -11,7 +11,9 @@ export async function main(ns) {
     const HAS_FORMULAS = ns.fileExists("Formulas.exe", "home");
 
     // Default Target Otomatis jika argumen kosong
-    const TARGET = ns.args[0] || getBestTarget(ns, HAS_FORMULAS);
+    // Gunakan `let` agar bisa di-update otomatis seiring naiknya level hacking
+    let TARGET = ns.args[0] || getBestTarget(ns, HAS_FORMULAS);
+    let lockedTarget = !!ns.args[0]; // Jika diisi manual via args, jangan auto-switch
 
     // RAM Cost dari Script Payload
     const HACK_RAM = ns.getScriptRam("/pro-v3/payload/hack.js");
@@ -41,6 +43,28 @@ export async function main(ns) {
     while (true) {
         // Cache worker list sekali per loop agar tidak scan berulang
         workers = getWorkers(ns);
+
+        // 0. AUTO RE-TARGET: Cek ulang apakah ada target yang lebih optimal setiap siklus
+        //    (hanya jika target tidak dikunci manual via argumen)
+        if (!lockedTarget) {
+            let newTarget = getBestTarget(ns, HAS_FORMULAS);
+            if (newTarget !== TARGET) {
+                ns.print(`\n🔀 TARGET BERGANTI: ${TARGET} → ${newTarget}`);
+                ns.print(`   (Hack Level naik atau ada server baru yang lebih menguntungkan)`);
+                TARGET = newTarget;
+                // Re-copy payload ke semua worker agar server baru siap digunakan
+                for (let s of workers) {
+                    if (s !== "home") {
+                        await ns.scp([
+                            "/pro-v3/payload/hack.js",
+                            "/pro-v3/payload/grow.js",
+                            "/pro-v3/payload/weaken1.js",
+                            "/pro-v3/payload/weaken2.js"
+                        ], s, "home");
+                    }
+                }
+            }
+        }
 
         // 1. FASE PREP: Pastikan server target dalam keadaan sempurna 100% uang dan 0% security
         await prepServer(ns, TARGET, workers, HAS_FORMULAS);
