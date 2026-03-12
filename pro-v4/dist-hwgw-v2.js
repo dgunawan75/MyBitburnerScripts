@@ -155,27 +155,12 @@ function getWorkers(ns) {
 }
 
 // =====================================
-// HELPER: Sort workers agar home selalu di AKHIR
-// Prioritaskan pserv-* dan server lain agar home tidak monopoli semua thread
-// =====================================
-function sortWorkers(workers) {
-    return [...workers].sort((a, b) => {
-        if (a === "home") return 1;  // home selalu paling belakang
-        if (b === "home") return -1;
-        return 0;
-    });
-}
-
-// =====================================
-// HELPER: Eksekutor Terdistribusi (Pecah Thread! — pserv-* duluan, home terakhir)
+// HELPER: Eksekutor Terdistribusi (Pecah Thread! — home duluan, lalu menyebar ke network)
 // =====================================
 function runDistributed(ns, script, target, threadsLeft, delay, batchNumber, workers) {
     if (threadsLeft <= 0) return;
 
-    // Sort: home selalu terakhir agar pserv-* dan server lain dapat jatah duluan
-    let ordered = sortWorkers(workers);
-
-    for (let server of ordered) {
+    for (let server of workers) {
         let free = ns.getServerMaxRam(server) - ns.getServerUsedRam(server);
         if (server === "home") {
             let reserve = Math.min(128, ns.getServerMaxRam("home") * 0.1);
@@ -235,10 +220,8 @@ async function prepServer(ns, target, workers, hasFormulas) {
             threadsNeeded = Math.ceil(ns.formulas.hacking.growThreads(srv, player, maxMoney) * 1.02);
         }
 
-        // Sort: kirim ke pserv-* duluan, home terakhir
-        let ordered = sortWorkers(workers);
         let totalSended = 0;
-        for (let server of ordered) {
+        for (let server of workers) {
             if (totalSended >= threadsNeeded) break;
 
             let free = ns.getServerMaxRam(server) - ns.getServerUsedRam(server);
