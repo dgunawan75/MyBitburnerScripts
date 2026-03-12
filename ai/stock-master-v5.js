@@ -1,11 +1,10 @@
 /*
 HISTORY_TICKS:  12,  // Simpan riwayat 12 tick terakhir
-SIGNAL_MIN_UP:   6,  // Beli jika naik >= 6 tick beruntun
+SIGNAL_MIN_UP:   4,  // Beli jika naik >= 4 tick beruntun (agresif)
 SIGNAL_MIN_DOWN: 4,  // Jual jika turun >= 4 tick beruntun
 
-Tips: SIGNAL_MIN_UP = 6 itu konservatif (aman dari false signal).
-Jika ingin lebih agresif beli lebih awal, turunkan ke 4.
-Jika ingin super konservatif dan menghindari loss, naikkan ke 8.
+Tips: SIGNAL_MIN_UP = 4 itu agresif (masuk lebih cepat, lebih sering beli).
+Jika ingin lebih konservatif dan menghindari false signal, naikkan ke 6-8.
 */
 
 /** @param {NS} ns **/
@@ -36,9 +35,9 @@ export async function main(ns) {
         DIVERSIFICATION: 0.33,   // Max 33% portfolio di 1 saham
         MAX_SPREAD_TICKS: 50,     // Max tick untuk tutup spread (mode 4S)
         BUY_ER_MIN: 0.0001, // Min Expected Return untuk beli (mode 4S)
-        HISTORY_TICKS: 12,     // Berapa tick harga disimpan (mode historis)
-        SIGNAL_MIN_UP: 6,      // Min tick naik beruntun untuk beli (mode historis)
-        SIGNAL_MIN_DOWN: 4,      // Min tick turun beruntun untuk jual (mode historis)
+        HISTORY_TICKS: 12,    // Berapa tick harga disimpan (mode historis)
+        SIGNAL_MIN_UP: 4,     // Min tick naik beruntun untuk beli (mode historis)
+        SIGNAL_MIN_DOWN: 4,   // Min tick turun beruntun untuk jual (mode historis)
     };
 
     // Penyimpanan histori harga: { SYM: [price1, price2, ...] }
@@ -64,7 +63,20 @@ export async function main(ns) {
     }
 
     // =========================================================
-    // HELPER: Ambil data saham lengkap (adaptif 4S vs historis)
+    // HELPER: Rekam histori harga ke priceHistory (dipanggil SEKALI per tick)
+    // =========================================================
+    function recordPrices() {
+        for (let sym of ns.stock.getSymbols()) {
+            let ask = ns.stock.getAskPrice(sym);
+            let bid = ns.stock.getBidPrice(sym);
+            if (!priceHistory[sym]) priceHistory[sym] = [];
+            priceHistory[sym].push((ask + bid) / 2);
+            if (priceHistory[sym].length > CONFIG.HISTORY_TICKS) priceHistory[sym].shift();
+        }
+    }
+
+    // =========================================================
+    // HELPER: Ambil data saham lengkap (TIDAK update histori — baca saja)
     // =========================================================
     function getStockList() {
         let symbols = ns.stock.getSymbols();
@@ -79,29 +91,16 @@ export async function main(ns) {
             let avgPrice = pos[1];
             let maxShares = ns.stock.getMaxShares(sym);
 
-            // Update histori harga
-            if (!priceHistory[sym]) priceHistory[sym] = [];
-            priceHistory[sym].push((ask + bid) / 2); // Simpan mid-price
-            if (priceHistory[sym].length > CONFIG.HISTORY_TICKS) {
-                priceHistory[sym].shift(); // Hapus data paling lama
-            }
-
-            let ER = 0;
-            let signal = 0;
-            let ticksToCoverSpread = Infinity;
+            let history = priceHistory[sym] || [];
+            let ER = 0, signal = 0, ticksToCoverSpread = Infinity;
 
             if (HAS_4S) {
-                // Mode Presisi: Gunakan Forecast & Volatility dari 4S API
                 let prob = ns.stock.getForecast(sym);
                 let vol = ns.stock.getVolatility(sym);
                 ER = vol * (prob - 0.5);
-                ticksToCoverSpread = ER > 0
-                    ? (Math.log(ask / bid) / Math.log(1 + ER))
-                    : Infinity;
+                ticksToCoverSpread = ER > 0 ? (Math.log(ask / bid) / Math.log(1 + ER)) : Infinity;
             } else {
-                // Mode Historis: Sinyal dari arah pergerakan harga
-                signal = calcSignal(priceHistory[sym]);
-                // Estimasi ER sederhana dari trend: semakin panjang streak, semakin "kuat"
+                signal = calcSignal(history);
                 ER = signal / 100;
             }
 
@@ -118,6 +117,9 @@ export async function main(ns) {
     // MAIN TRADING LOOP
     // =========================================================
     while (true) {
+        // Rekam harga SEKALI per tick — histori tidak boleh diisi lebih dari sekali per loop!
+        recordPrices();
+
         let cash = ns.getServerMoneyAvailable("home");
         let stocks = getStockList();
 
@@ -159,10 +161,10 @@ export async function main(ns) {
         }
 
         // -------------------------------------------------------
-        // FASE 2: REFRESH DANA
+        // FASE 2: REFRESH DANA (tanpa rekam histori ulang!)
         // -------------------------------------------------------
         cash = ns.getServerMoneyAvailable("home");
-        stocks = getStockList();
+        stocks = getStockList(); // Baca ulang harga terbaru, TIDAK update histori
         stockWealth = stocks.reduce((sum, s) => sum + s.positionValue, 0);
         totalWealth = cash + stockWealth;
 

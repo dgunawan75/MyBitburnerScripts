@@ -8,6 +8,7 @@ const CONFIG = {
     RESERVE_PERCENT: 0.10,       // Selalu sisakan 10% cash di home
     BUDGET_PERCENT: 0.25,        // Max 25% dari total uang tunai boleh dibakar sekali jalan
     COMPARE_TO_HOME: 0.10,       // Upgrade dilarang jika server baru < 10% RAM Home (agar upgrade berarti)
+    BOOTSTRAP_THRESHOLD: 6,      // Di bawah N server, abaikan COMPARE_TO_HOME & MIN_BUY_RAM (Early-Game Mode!)
 };
 
 export async function manageServers(ns) {
@@ -64,18 +65,31 @@ export async function manageServers(ns) {
     // Cari RAM Max yang masuk akal dibeli dengan uang 'Spendable'
     let maxAffordableRam = getBestRam(ns, spendable);
 
-    // Pengaman ukuran RAM wajar
-    if (maxAffordableRam > CONFIG.MAX_RAM_CAP) maxAffordableRam = CONFIG.MAX_RAM_CAP;
-    if (maxAffordableRam < CONFIG.MIN_BUY_RAM) {
-        ns.print(`⏳ Menunda: Uang $${ns.formatNumber(spendable)} tidak cukup beli server min ${ns.formatRam(CONFIG.MIN_BUY_RAM)}.`);
-        return;
-    }
+    // Mode Bootstrap: jika server masih sedikit, abaikan batas COMPARE_TO_HOME & MIN_BUY_RAM
+    // Ini mengatasi masalah pasca-reset saat Home sudah besar tapi kantong masih kosong!
+    let isBootstrap = servers.length < CONFIG.BOOTSTRAP_THRESHOLD;
 
-    // Pengaman agar tidak membeli barang receh saat kita sudah punya Home canggih
-    let homeRam = ns.getServerMaxRam("home");
-    if (maxAffordableRam < homeRam * CONFIG.COMPARE_TO_HOME) {
-        ns.print(`⏳ Menunda: Max beli (${ns.formatRam(maxAffordableRam)}) < 10% Home (${ns.formatRam(homeRam)}). Beli ini sia-sia!`);
-        return; // RAM yang sanggup kita beli terlalu cupu dibanding Home. Nabung dulu!
+    if (!isBootstrap) {
+        // Pengaman ukuran RAM wajar (hanya berlaku di luar mode bootstrap)
+        if (maxAffordableRam > CONFIG.MAX_RAM_CAP) maxAffordableRam = CONFIG.MAX_RAM_CAP;
+        if (maxAffordableRam < CONFIG.MIN_BUY_RAM) {
+            ns.print(`⏳ Menunda: Uang $${ns.formatNumber(spendable)} tidak cukup beli server min ${ns.formatRam(CONFIG.MIN_BUY_RAM)}.`);
+            return;
+        }
+
+        // Pengaman agar tidak membeli barang receh saat kita sudah punya Home canggih
+        let homeRam = ns.getServerMaxRam("home");
+        if (maxAffordableRam < homeRam * CONFIG.COMPARE_TO_HOME) {
+            ns.print(`⏳ Menunda: Max beli (${ns.formatRam(maxAffordableRam)}) < 10% Home (${ns.formatRam(homeRam)}). Beli ini sia-sia!`);
+            return;
+        }
+    } else {
+        // Mode Bootstrap: beli apa pun yang sanggup dibeli >= 8 GB
+        if (maxAffordableRam < 8) {
+            ns.print(`⏳ Bootstrap: Uang belum cukup beli server 8 GB. Waiting...`);
+            return;
+        }
+        ns.print(`🌱 Mode BOOTSTRAP aktif (${servers.length}/${CONFIG.BOOTSTRAP_THRESHOLD} server). Beli apa pun yang sanggup!`);
     }
 
     let cost = ns.getPurchasedServerCost(maxAffordableRam);
