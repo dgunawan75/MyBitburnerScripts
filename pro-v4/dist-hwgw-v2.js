@@ -10,10 +10,31 @@ export async function main(ns) {
     // Cek apakah Formulas.exe tersedia
     const HAS_FORMULAS = ns.fileExists("Formulas.exe", "home");
 
-    // Default Target Otomatis jika argumen kosong
-    // Gunakan `let` agar bisa di-update otomatis seiring naiknya level hacking
-    let TARGET = ns.args[0] || getBestTarget(ns, HAS_FORMULAS);
-    let lockedTarget = !!ns.args[0]; // Jika diisi manual via args, jangan auto-switch
+    // =============== PARSING ARGUMEN ===============
+    // Usage:
+    //   run dist-hwgw-v2.js                      → semua server (default)
+    //   run dist-hwgw-v2.js --pserv              → home + pserv-* saja
+    //   run dist-hwgw-v2.js --home               → home saja
+    //   run dist-hwgw-v2.js foodnstuff           → target manual, semua server
+    //   run dist-hwgw-v2.js foodnstuff --pserv   → target manual, pserv saja
+    let WORKER_MODE = "all";   // "all" | "pserv" | "home"
+    let rawArgs = [...ns.args];
+
+    if (rawArgs.includes("--pserv")) {
+        WORKER_MODE = "pserv";
+        rawArgs = rawArgs.filter(a => a !== "--pserv");
+    } else if (rawArgs.includes("--home")) {
+        WORKER_MODE = "home";
+        rawArgs = rawArgs.filter(a => a !== "--home");
+    }
+
+    // Sisa argumen pertama (jika ada) = target server
+    let TARGET = rawArgs[0] || getBestTarget(ns, HAS_FORMULAS);
+    let lockedTarget = !!rawArgs[0]; // Jika diisi manual via args, jangan auto-switch
+
+    const WORKER_MODE_LABEL = WORKER_MODE === "pserv" ? "🖥️ home + pserv-*" :
+        WORKER_MODE === "home" ? "🏠 home saja" :
+            "🌐 Semua Server";
 
     // RAM Cost dari Script Payload
     const HACK_RAM = ns.getScriptRam("/pro-v3/payload/hack.js");
@@ -23,11 +44,12 @@ export async function main(ns) {
     ns.print(`=========================================`);
     ns.print(` 🌐 DISTRIBUTED H.W.G.W ENGINE v2       `);
     ns.print(` 🎯 TARGET AKTIF: ${TARGET.toUpperCase()}`);
-    ns.print(` 🧮 Mode: ${HAS_FORMULAS ? "✅ Formulas.exe (Presisi)" : "⚡ Fallback (Estimasi)"}`);
+    ns.print(` 🧮 Formulas : ${HAS_FORMULAS ? "✅ Presisi" : "⚡ Estimasi"}`);
+    ns.print(` 💻 Workers  : ${WORKER_MODE_LABEL}`);
     ns.print(`=========================================`);
 
-    // Helper: Pindah payload ke semua worker
-    let workers = getWorkers(ns);
+    // Helper: Pindah payload ke semua worker yang relevan
+    let workers = filterWorkers(getWorkers(ns), WORKER_MODE);
     for (let s of workers) {
         if (s !== "home") {
             await ns.scp([
@@ -41,8 +63,8 @@ export async function main(ns) {
 
     // Main Engine Loop
     while (true) {
-        // Cache worker list sekali per loop agar tidak scan berulang
-        workers = getWorkers(ns);
+        // Cache worker list sekali per loop — filter sesuai mode yang dipilih
+        workers = filterWorkers(getWorkers(ns), WORKER_MODE);
 
         // 0. AUTO RE-TARGET: Cek ulang apakah ada target yang lebih optimal setiap siklus
         //    (hanya jika target tidak dikunci manual via argumen)
@@ -176,6 +198,18 @@ function getWorkers(ns) {
         for (let n of ns.scan(s)) stack.push(n);
     }
     return [...visited].filter(s => ns.hasRootAccess(s) && ns.getServerMaxRam(s) > 0);
+}
+
+// =====================================
+// HELPER: Filter worker sesuai mode yang dipilih
+//   "all"   → semua server yang di-root (default)
+//   "pserv" → home + pserv-* saja
+//   "home"  → home saja
+// =====================================
+function filterWorkers(workers, mode) {
+    if (mode === "home") return workers.filter(s => s === "home");
+    if (mode === "pserv") return workers.filter(s => s === "home" || s.startsWith("pserv-"));
+    return workers; // "all" — tidak ada filter
 }
 
 // =====================================

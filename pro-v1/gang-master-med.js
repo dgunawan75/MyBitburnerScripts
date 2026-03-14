@@ -17,7 +17,9 @@ export async function main(ns) {
     const EQUIPMENT_LIMIT_PERCENT = 0.20; // Max 20% uang tunai untuk beli equip per siklus
     const ASCENSION_THRESHOLD = 1.15; // Set 1.15 untuk mid-game, lebih sering ascend
     const WANTED_PENALTY_LIMIT = 0.98; // Mulai lakukan vigilante jika penalty menyentuh 2%
-    const MIN_TRAINING_STAT = 400; // Standar minimal stats untuk lulus dari pelatihan
+    const MIN_TRAINING_STAT = 400;    // Standar minimal stats untuk lulus dari pelatihan
+    const POWER_BUILD_RATIO = 0.20;   // 20% anggota terkuat di-assign "Territory Warfare" untuk build Power
+    // Warfare TIDAK diaktifkan — hanya akumulasi Power pasif!
 
     while (true) {
         ns.clearLog();
@@ -29,11 +31,15 @@ export async function main(ns) {
         ns.print(`💰 Pendapatan : $${ns.formatNumber(gangInfo.moneyGainRate * 5)} / detik`);
         ns.print(`👑 Respect    : ${ns.formatNumber(gangInfo.respect)}`);
         ns.print(`🚨 Wanted Lvl : ${ns.formatNumber(gangInfo.wantedLevel)} (Penalty: ${(100 - gangInfo.wantedPenalty * 100).toFixed(2)}%)`);
+        ns.print(`⚡ Power      : ${ns.formatNumber(gangInfo.power)} | 🗺️ Territory: ${(gangInfo.territory * 100).toFixed(2)}%`);
+
+        // Pastikan Warfare SELALU OFF — kita hanya build Power, tidak mau bentrok
+        ns.gang.setTerritoryWarfare(false);
 
         recruitMembers(ns);
         manageAscension(ns, ASCENSION_THRESHOLD);
         buyEquipment(ns, EQUIPMENT_LIMIT_PERCENT);
-        assignTasks(ns, gangInfo, WANTED_PENALTY_LIMIT, MIN_TRAINING_STAT);
+        assignTasks(ns, gangInfo, WANTED_PENALTY_LIMIT, MIN_TRAINING_STAT, POWER_BUILD_RATIO);
 
         await ns.sleep(5000);
     }
@@ -107,53 +113,65 @@ function buyEquipment(ns, budgetPercent) {
 
 // ==========================================
 // 4. PEMBAGIAN TUGAS CERDAS (AI ASSIGNMENT)
+//    + POWER BUILDING via Territory Warfare
 // ==========================================
-function assignTasks(ns, gangInfo, wantedPenaltyLimit, minTrainingStat) {
+function assignTasks(ns, gangInfo, wantedPenaltyLimit, minTrainingStat, powerRatio) {
     let members = ns.gang.getMemberNames();
-    let wantedPenalty = gangInfo.wantedPenalty; // Semakin dekat ke 1, semakin tidak ada penalti
+    let wantedPenalty = gangInfo.wantedPenalty;
 
-    // Jika penalty menyentuh limit (misal 0.98), butuh seseorang untuk Vigilante Justice
     let needVigilante = wantedPenalty < wantedPenaltyLimit && gangInfo.wantedLevel > 10;
     let vigilanteAssigned = 0;
 
-    for (let member of members) {
-        let info = ns.gang.getMemberInformation(member);
-        let avgStats = (info.str + info.def + info.dex + info.agi) / 4;
-        let pTask = info.task; // current task
-        let nTask = ""; // new task
+    // Sortir dari terkuat ke terlemah untuk alokasi Territory Warfare
+    let ranked = members.map(m => {
+        let info = ns.gang.getMemberInformation(m);
+        return { name: m, avg: (info.str + info.def + info.dex + info.agi) / 4, task: info.task };
+    }).sort((a, b) => b.avg - a.avg);
 
-        // Aturan 1: Anak baru disuruh sekolah (Train Combat) dengan target stat lebih tinggi (mid-game)
-        if (avgStats < minTrainingStat) {
+    // Hitung berapa slot Territory Warfare (dari anggota terkuat)
+    let warSlots = Math.floor(members.length * powerRatio);
+    let warAssigned = 0;
+
+    for (let { name, avg } of ranked) {
+        let pTask = ns.gang.getMemberInformation(name).task;
+        let nTask = "";
+
+        // Aturan 1: Anak baru → Train Combat
+        if (avg < minTrainingStat) {
             nTask = "Train Combat";
         }
-        // Aturan 2: Jika butuh penurun Wanted Level, dan anak ini cukup kuat
-        else if (needVigilante && vigilanteAssigned < Math.max(1, Math.floor(members.length / 4)) && avgStats > minTrainingStat) {
+        // Aturan 2: Vigilante jika Wanted terlalu tingi
+        else if (needVigilante && vigilanteAssigned < Math.max(1, Math.floor(members.length / 4)) && avg > minTrainingStat) {
             nTask = "Vigilante Justice";
             vigilanteAssigned++;
         }
-        // Aturan 3: Jika anggota masih sedikit (< 6), fokus utama adalah MENCARI RESPECT agar cepat bisa rekrut
-        else if (members.length < 6) {
-            if (avgStats < 250) nTask = "Mug People";
-            else nTask = "Terrorism"; // Terrorism memberikan Respect paling cepat
+        // Aturan 3: Anggota TERKUAT → Territory Warfare (build Power tanpa bentrok)
+        else if (warAssigned < warSlots && avg > minTrainingStat * 2) {
+            nTask = "Territory Warfare";
+            warAssigned++;
         }
-        // Aturan 4: Preman kroco (Cari modal awal)
-        else if (avgStats < 500) {
+        // Aturan 4: Anggota sedikit → cari Respect
+        else if (members.length < 6) {
+            nTask = avg < 250 ? "Mug People" : "Terrorism";
+        }
+        // Aturan 5: Preman kroco
+        else if (avg < 500) {
             nTask = "Mug People";
         }
-        // Aturan 5: Preman menengah + Cari Respect Tambahan
-        else if (avgStats < 1200) {
-            // Sepertiga anggota difokuskan cari respect, sisanya cari uang
-            if (Math.random() > 0.6) nTask = "Terrorism";
-            else nTask = "Strongarm Assassinations";
+        // Aturan 6: Preman menengah
+        else if (avg < 1200) {
+            nTask = Math.random() > 0.6 ? "Terrorism" : "Strongarm Assassinations";
         }
-        // Aturan 6: Bandar Kelas Kakap (Mesin Uang Utama Miliaran)
+        // Aturan 7: Bandar Kelas Kakap
         else {
             nTask = "Human Trafficking";
         }
 
         if (nTask !== "" && pTask !== nTask) {
-            ns.gang.setMemberTask(member, nTask);
-            ns.print(`🔄 Menggeser ${member} ke tugas: ${nTask}`);
+            ns.gang.setMemberTask(name, nTask);
+            ns.print(`🔄 Menggeser ${name} → ${nTask} (avg: ${Math.floor(avg)})`);
         }
     }
+
+    ns.print(`⚡ Power Builders: ${warAssigned}/${members.length} anggota terkuat`);
 }
