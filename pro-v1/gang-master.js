@@ -107,43 +107,33 @@ function buyEquipment(ns, budgetPercent) {
 // ==========================================
 function assignTasks(ns, gangInfo) {
     let members = ns.gang.getMemberNames();
-    let wantedPenalty = gangInfo.wantedPenalty; // Semakin dekat ke 1, semakin tidak ada penalti
+    let wantedPenalty = gangInfo.wantedPenalty;
 
-    // Jika penalty di bawah 0.85 (15% kerugian stats), butuh seseorang untuk Vigilante Justice menurunkan Wanted level.
     let needVigilante = wantedPenalty < 0.85 && gangInfo.wantedLevel > 10;
     let vigilanteAssigned = 0;
 
     for (let member of members) {
         let info = ns.gang.getMemberInformation(member);
         let avgStats = (info.str + info.def + info.dex + info.agi) / 4;
-        let pTask = info.task; // current task
-        let nTask = ""; // new task
+        let pTask = info.task;
+        let nTask = "";
 
-        // Aturan 1: Anak baru disuruh sekolah (Train Combat)
         if (avgStats < 100) {
             nTask = "Train Combat";
         }
-        // Aturan 2: Jika butuh penurun Wanted Level, dan anak ini cukup kuat
         else if (needVigilante && vigilanteAssigned < Math.max(1, Math.floor(members.length / 4)) && avgStats > 200) {
             nTask = "Vigilante Justice";
             vigilanteAssigned++;
         }
-        // Aturan 3: Jika anggota masih sedikit (< 6), fokus utama adalah MENCARI RESPECT agar cepat bisa rekrut
         else if (members.length < 6) {
-            if (avgStats < 250) nTask = "Mug People";
-            else nTask = "Terrorism"; // Terrorism memberikan Respect paling cepat
+            nTask = avgStats < 250 ? "Mug People" : "Terrorism";
         }
-        // Aturan 4: Preman kroco (Cari modal awal)
         else if (avgStats < 300) {
             nTask = "Mug People";
         }
-        // Aturan 5: Preman menengah + Cari Respect Tambahan
         else if (avgStats < 800) {
-            // Sepertiga anggota difokuskan cari respect, sisanya cari uang
-            if (Math.random() > 0.6) nTask = "Terrorism";
-            else nTask = "Strongarm Assassinations";
+            nTask = Math.random() > 0.6 ? "Terrorism" : "Strongarm Civilians";
         }
-        // Aturan 6: Bandar Kelas Kakap (Mesin Uang Utama Miliaran)
         else {
             nTask = "Human Trafficking";
         }

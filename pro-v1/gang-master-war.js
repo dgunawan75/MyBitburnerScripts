@@ -185,7 +185,7 @@ function assignWarTasks(ns, gangInfo, members, warActive, wantedLimit, minStat, 
             nTask = avg < 250 ? "Mug People" : "Terrorism";
         }
         else if (avg < 500) { nTask = "Mug People"; }
-        else if (avg < 1200) { nTask = Math.random() > 0.6 ? "Terrorism" : "Strongarm Assassinations"; }
+        else if (avg < 1200) { nTask = Math.random() > 0.6 ? "Terrorism" : "Strongarm Civilians"; }
         else { nTask = "Human Trafficking"; }
 
         if (nTask !== "" && pTask !== nTask) {

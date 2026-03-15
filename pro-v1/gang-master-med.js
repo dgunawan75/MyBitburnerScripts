@@ -112,7 +112,7 @@ function buyEquipment(ns, budgetPercent) {
 }
 
 // ==========================================
-// 4. PEMBAGIAN TUGAS CERDAS (AI ASSIGNMENT)
+// 4. PEMBAGIAN TUGAS (COMBAT GANG)
 //    + POWER BUILDING via Territory Warfare
 // ==========================================
 function assignTasks(ns, gangInfo, wantedPenaltyLimit, minTrainingStat, powerRatio) {
@@ -122,13 +122,11 @@ function assignTasks(ns, gangInfo, wantedPenaltyLimit, minTrainingStat, powerRat
     let needVigilante = wantedPenalty < wantedPenaltyLimit && gangInfo.wantedLevel > 10;
     let vigilanteAssigned = 0;
 
-    // Sortir dari terkuat ke terlemah untuk alokasi Territory Warfare
     let ranked = members.map(m => {
         let info = ns.gang.getMemberInformation(m);
         return { name: m, avg: (info.str + info.def + info.dex + info.agi) / 4, task: info.task };
     }).sort((a, b) => b.avg - a.avg);
 
-    // Hitung berapa slot Territory Warfare (dari anggota terkuat)
     let warSlots = Math.floor(members.length * powerRatio);
     let warAssigned = 0;
 
@@ -136,42 +134,24 @@ function assignTasks(ns, gangInfo, wantedPenaltyLimit, minTrainingStat, powerRat
         let pTask = ns.gang.getMemberInformation(name).task;
         let nTask = "";
 
-        // Aturan 1: Anak baru → Train Combat
         if (avg < minTrainingStat) {
             nTask = "Train Combat";
-        }
-        // Aturan 2: Vigilante jika Wanted terlalu tingi
-        else if (needVigilante && vigilanteAssigned < Math.max(1, Math.floor(members.length / 4)) && avg > minTrainingStat) {
+        } else if (needVigilante && vigilanteAssigned < Math.max(1, Math.floor(members.length / 4))) {
             nTask = "Vigilante Justice";
             vigilanteAssigned++;
-        }
-        // Aturan 3: Anggota TERKUAT → Territory Warfare (build Power tanpa bentrok)
-        else if (warAssigned < warSlots && avg > minTrainingStat * 2) {
+        } else if (warAssigned < warSlots && avg > minTrainingStat * 2) {
             nTask = "Territory Warfare";
             warAssigned++;
-        }
-        // Aturan 4: Anggota sedikit → cari Respect
-        else if (members.length < 6) {
+        } else if (members.length < 6) {
             nTask = avg < 250 ? "Mug People" : "Terrorism";
-        }
-        // Aturan 5: Preman kroco
-        else if (avg < 500) {
-            nTask = "Mug People";
-        }
-        // Aturan 6: Preman menengah
-        else if (avg < 1200) {
-            nTask = Math.random() > 0.6 ? "Terrorism" : "Strongarm Assassinations";
-        }
-        // Aturan 7: Bandar Kelas Kakap
-        else {
-            nTask = "Human Trafficking";
-        }
+        } else if (avg < 500) { nTask = "Mug People"; }
+        else if (avg < 1200) { nTask = Math.random() > 0.6 ? "Terrorism" : "Strongarm Civilians"; }
+        else { nTask = "Human Trafficking"; }
 
         if (nTask !== "" && pTask !== nTask) {
             ns.gang.setMemberTask(name, nTask);
-            ns.print(`🔄 Menggeser ${name} → ${nTask} (avg: ${Math.floor(avg)})`);
+            ns.print(`🔄 ${name} (avg:${Math.floor(avg)}) → ${nTask}`);
         }
     }
-
-    ns.print(`⚡ Power Builders: ${warAssigned}/${members.length} anggota terkuat`);
+    ns.print(`⚡ Power Builders: ${warAssigned}/${members.length} anggota`);
 }
