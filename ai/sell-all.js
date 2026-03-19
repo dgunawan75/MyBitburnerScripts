@@ -26,6 +26,7 @@ export async function main(ns) {
     let watchMode = false;
     let targetProfit = 0.02; // Default 2%
 
+
     // --all : Jual SEMUA posisi tanpa peduli untung/rugi
     if (ns.args.includes("--all")) {
         ns.print(`🚨 MODE --all: Jual SEMUA posisi sekarang juga!`);
@@ -65,6 +66,7 @@ export async function main(ns) {
     ns.print(` 📉 STOCK SELLER`);
     ns.print(` 🎯 Target Profit : ${targetLabel}`);
     ns.print(` 🔄 Mode          : ${watchMode ? "PANTAU TERUS (--" + (targetProfit * 100).toFixed(0) + ")" : "Sekali Jalan"}`);
+    ns.print(`=========================================`);
     ns.print(`=========================================`);
 
     // === FUNGSI UTAMA ===
