@@ -135,11 +135,21 @@ function assignTasks(ns, gangInfo, members, wantedLimit, minHack, warActive, war
 }
 
 function recruitMembers(ns) {
+    let names = ns.gang.getMemberNames();
+    let index = 1;
     while (ns.gang.canRecruitMember()) {
-        let names = ns.gang.getMemberNames();
-        let newName = "Hacker-" + (names.length + 1);
-        if (ns.gang.recruitMember(newName)) ns.print(`🎉 Rekrut: ${newName}`);
-        else break;
+        let newName = "Hacker-" + index;
+        if (names.includes(newName)) {
+            index++;
+            continue;
+        }
+        if (ns.gang.recruitMember(newName)) {
+            ns.print(`🎉 Rekrut: ${newName}`);
+            names.push(newName);
+            index++;
+        } else {
+            break;
+        }
     }
 }
 
