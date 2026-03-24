@@ -15,8 +15,8 @@ export async function main(ns) {
     const ASCENSION_THRESHOLD = 1.15;
     const WANTED_PENALTY_LIMIT = 0.98;
     const MIN_HACK_STAT = 400;
-    const WAR_WIN_CHANCE_MIN = 0.55;
-    const WAR_RETREAT_CHANCE = 0.45;
+    const WAR_WIN_CHANCE_MIN = 0.55; // Serang jika win chance > 55%
+    const WAR_RETREAT_CHANCE = 0.65; // Retreat HANYA jika musuh > 65% menang lawan kita
     const MIN_MEMBERS_FOR_WAR = 8;
     const WARFARE_RATIO = 0.40;
 
@@ -74,11 +74,28 @@ function analyzeWarfare(ns, others, memberCount, winMin, retreatThreshold, minMe
     for (let [name, info] of Object.entries(others)) {
         if (info.territory <= 0) continue;
         let win = ns.gang.getChanceToWinClash(name);
-        if ((1 - win) > retreatThreshold && info.territory > 0.05) shouldRetreat = true;
-        if (win < winMin) { avoidGangs.push(name); continue; }
-        if (win > bestWinChance) { bestWinChance = win; targetGang = name; }
+        let loseChance = 1 - win;
+
+        // Retreat hanya jika ada musuh SANGAT kuat (> retreatThreshold)
+        // DAN mereka punya territory besar (> 10%) — bukan jika sekadar 50/50
+        if (loseChance > retreatThreshold && info.territory > 0.10) {
+            shouldRetreat = true;
+        }
+
+        if (win < winMin) {
+            avoidGangs.push(`${name}(${(win * 100).toFixed(0)}%)`);
+        } else if (win > bestWinChance) {
+            bestWinChance = win;
+            targetGang = name;
+        }
     }
-    return { engage: !shouldRetreat && targetGang !== null, targetGang, bestWinChance, avoidGangs };
+
+    // Engage jika ada target yang bisa dikalahkan,
+    // KECUALI ada musuh yang benar-benar berbahaya (jarang sekali)
+    return {
+        engage: targetGang !== null && !shouldRetreat,
+        targetGang, bestWinChance, avoidGangs
+    };
 }
 
 function assignTasks(ns, gangInfo, members, wantedLimit, minHack, warActive, warRatio) {
