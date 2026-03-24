@@ -1,4 +1,5 @@
 export async function deployHack(ns, workers, targets) {
+    if (!targets || targets.length === 0) return;
 
     for (let w of workers) {
 

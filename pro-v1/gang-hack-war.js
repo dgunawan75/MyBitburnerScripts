@@ -104,17 +104,19 @@ function assignTasks(ns, gangInfo, members, wantedLimit, minHack, warActive, war
 
     let ranked = members.map(m => {
         let info = ns.gang.getMemberInformation(m);
-        return { name: m, hack: info.hack };
+        let combat = (info.str + info.def + info.dex + info.agi) / 4;
+        return { name: m, hack: info.hack, combat: combat };
     }).sort((a, b) => b.hack - a.hack);
 
     let warSlots = warActive ? Math.floor(members.length * warRatio) : 0;
     let warAssigned = 0;
 
-    for (let { name, hack } of ranked) {
+    for (let { name, hack, combat } of ranked) {
         let pTask = ns.gang.getMemberInformation(name).task;
         let nTask = "";
 
         if (hack < minHack) { nTask = "Train Hacking"; }
+        else if (combat < 200) { nTask = "Train Combat"; }
         else if (needVigilante && vigilanteCount < Math.max(1, Math.floor(members.length / 4))) {
             nTask = "Ethical Hacking"; vigilanteCount++;
         }
@@ -129,7 +131,7 @@ function assignTasks(ns, gangInfo, members, wantedLimit, minHack, warActive, war
 
         if (nTask && pTask !== nTask) {
             ns.gang.setMemberTask(name, nTask);
-            ns.print(`🔄 ${name} (hack:${Math.floor(hack)}) → ${nTask}`);
+            ns.print(`🔄 ${name} (hack:${Math.floor(hack)} cbt:${Math.floor(combat)}) → ${nTask}`);
         }
     }
 }
@@ -173,8 +175,8 @@ function buyEquipment(ns, budgetPct) {
             if (info.upgrades.includes(eq) || info.augmentations.includes(eq)) continue;
             let cost = ns.gang.getEquipmentCost(eq);
             let budget = ns.getServerMoneyAvailable("home") * budgetPct;
-            let stats = ns.gang.getEquipmentStats(eq);
-            if ((stats.str || stats.def) && !stats.hack && !stats.cha) continue;
+
+            // Hacker gang tetap butuh Weapon, Armor & Vehicle jika ingin bertahan di Territory Warfare
             if (cost <= budget && ns.gang.purchaseEquipment(m, eq))
                 ns.print(`🛍️ ${eq} → ${m}`);
         }
