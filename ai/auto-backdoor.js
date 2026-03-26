@@ -11,46 +11,43 @@ export async function main(ns) {
     let hackingLevel = ns.getHackingLevel();
     let backdoorCount = 0;
 
-    // Fungsi rekursif untuk scanning seluruh jaringan mulai dari "home"
-    async function scanAndBackdoor(currentServer) {
-        scanned.add(currentServer);
+    // Fungsi rekursif DFS nyata (menggerakkan terminal pemain langkah demi langkah)
+    async function scanAndBackdoor(currentServer, parentServer) {
+        // Cek target di mana terminal sedang berada
+        if (currentServer !== "home" && !currentServer.startsWith("pserv-")) {
+            let hasRoot = ns.hasRootAccess(currentServer);
+            let reqLevel = ns.getServerRequiredHackingLevel(currentServer);
+            let isBackdoored = ns.getServer(currentServer).backdoorInstalled;
+
+            if (hasRoot && ns.getHackingLevel() >= reqLevel && !isBackdoored) {
+                ns.print(`[+] Ditemukan celah backdoor di: ${currentServer}`);
+                ns.print(`    Level: ${reqLevel} | Mencoba backdoor...`);
+
+                await ns.singularity.installBackdoor();
+
+                ns.print(`    > SUKSES! Backdoor terpasang di ${currentServer}`);
+                backdoorCount++;
+            }
+        }
 
         let neighbors = ns.scan(currentServer);
-
         for (let nextServer of neighbors) {
-            // Jangan scan server yang sudah pernah di scan
-            // Abaikan server hasil pembelian kita ("pserv-")
-            if (!scanned.has(nextServer) && !nextServer.startsWith("pserv-")) {
+            // Hindari kembali melangkah ke node sebelumnya di dalam loop
+            if (nextServer !== parentServer) {
+                // Melangkah MAJU ke server terdalam
+                ns.singularity.connect(nextServer);
 
-                // Harus punya hak akses root dulu (Nuke berhasil)
-                let hasRoot = ns.hasRootAccess(nextServer);
-                // Level hack kita harus lebih tinggi atau sama dengan syarat
-                let reqLevel = ns.getServerRequiredHackingLevel(nextServer);
-                // Cek apakah server ini sudah pernah di-backdoor sebelumnya
-                let serverObj = ns.getServer(nextServer);
-                let isBackdoored = serverObj.backdoorInstalled;
+                // Terus masuk merekursif cabang ini
+                await scanAndBackdoor(nextServer, currentServer);
 
-                if (hasRoot && hackingLevel >= reqLevel && !isBackdoored) {
-                    ns.print(`[+] Ditemukan celah backdoor di: ${nextServer}`);
-                    ns.print(`    Level: ${reqLevel} | Mencoba backdoor...`);
-
-                    // Proses backdoor akan memakan waktu sepersekian detik per server
-                    await ns.singularity.connect(nextServer);
-                    await ns.singularity.installBackdoor();
-                    await ns.singularity.connect("home");
-
-                    ns.print(`    > SUKSES! Backdoor terpasang di ${nextServer}`);
-                    backdoorCount++;
-                }
-
-                // Terus masuk lebih dalam ke dalam jaringan dari server ini
-                await scanAndBackdoor(nextServer);
+                // Melangkah MUNDUR kembali ke server asal agar path tidak putus
+                ns.singularity.connect(currentServer);
             }
         }
     }
 
     // Eksekusi fungsi dimulai dari server rumah
-    await scanAndBackdoor("home");
+    await scanAndBackdoor("home", null);
 
     // Kembali ke home untuk memastikan terminal aktif kita tidak tersesat
     ns.singularity.connect("home");

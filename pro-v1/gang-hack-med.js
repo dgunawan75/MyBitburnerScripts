@@ -44,11 +44,21 @@ export async function main(ns) {
 }
 
 function recruitMembers(ns) {
+    let members = ns.gang.getMemberNames();
+    let index = 1;
     while (ns.gang.canRecruitMember()) {
-        let members = ns.gang.getMemberNames();
-        let newName = "Hacker-" + (members.length + 1);
-        if (ns.gang.recruitMember(newName)) ns.print(`🎉 Rekrut: ${newName}`);
-        else break;
+        let newName = "Hacker-" + index;
+        if (members.includes(newName)) {
+            index++;
+            continue;
+        }
+        if (ns.gang.recruitMember(newName)) {
+            ns.print(`🎉 Rekrut: ${newName}`);
+            members.push(newName);
+            index++;
+        } else {
+            break;
+        }
     }
 }
 
@@ -73,8 +83,8 @@ function buyEquipment(ns, budgetPct) {
             if (info.upgrades.includes(eq) || info.augmentations.includes(eq)) continue;
             let cost = ns.gang.getEquipmentCost(eq);
             let budget = ns.getServerMoneyAvailable("home") * budgetPct;
-            let stats = ns.gang.getEquipmentStats(eq);
-            if ((stats.str || stats.def) && !stats.hack && !stats.cha) continue;
+
+            // Hacker gang tetap butuh Weapon, Armor & Vehicle jika ingin bertahan di Territory Warfare
             if (cost <= budget && ns.gang.purchaseEquipment(m, eq))
                 ns.print(`🛍️ ${eq} → ${m}`);
         }
@@ -89,18 +99,21 @@ function assignTasks(ns, gangInfo, wantedLimit, minHack, powerRatio) {
     // Sortir dari hack stat tertinggi ke terendah
     let ranked = members.map(m => {
         let info = ns.gang.getMemberInformation(m);
-        return { name: m, hack: info.hack };
+        let combat = (info.str + info.def + info.dex + info.agi) / 4;
+        return { name: m, hack: info.hack, combat: combat };
     }).sort((a, b) => b.hack - a.hack);
 
     let warSlots = Math.floor(members.length * powerRatio);
     let warAssigned = 0;
 
-    for (let { name, hack } of ranked) {
+    for (let { name, hack, combat } of ranked) {
         let pTask = ns.gang.getMemberInformation(name).task;
         let nTask = "";
 
         if (hack < minHack) {
             nTask = "Train Hacking";
+        } else if (combat < 100) {
+            nTask = "Train Combat";
         } else if (needVigilante && vigilanteCount < Math.max(1, Math.floor(members.length / 4))) {
             nTask = "Ethical Hacking";
             vigilanteCount++;
@@ -116,7 +129,7 @@ function assignTasks(ns, gangInfo, wantedLimit, minHack, powerRatio) {
 
         if (nTask && pTask !== nTask) {
             ns.gang.setMemberTask(name, nTask);
-            ns.print(`🔄 ${name} (hack:${Math.floor(hack)}) → ${nTask}`);
+            ns.print(`🔄 ${name} (hack:${Math.floor(hack)} cbt:${Math.floor(combat)}) → ${nTask}`);
         }
     }
     ns.print(`⚡ Power Builders: ${warAssigned}/${members.length} anggota`);

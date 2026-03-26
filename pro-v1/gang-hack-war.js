@@ -116,7 +116,7 @@ function assignTasks(ns, gangInfo, members, wantedLimit, minHack, warActive, war
         let nTask = "";
 
         if (hack < minHack) { nTask = "Train Hacking"; }
-        else if (combat < 200) { nTask = "Train Combat"; }
+        else if (combat < 100) { nTask = "Train Combat"; }
         else if (needVigilante && vigilanteCount < Math.max(1, Math.floor(members.length / 4))) {
             nTask = "Ethical Hacking"; vigilanteCount++;
         }
