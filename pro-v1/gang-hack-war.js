@@ -167,18 +167,25 @@ function manageAscension(ns, threshold) {
 }
 
 function buyEquipment(ns, budgetPct) {
+    let money = ns.getServerMoneyAvailable("home");
+    let reserve = 100_000_000; // Dana darurat minimal $100 Juta
+    if (money < reserve) return;
+
+    let allowedBudget = (money - reserve) * budgetPct;
+
     let equips = ns.gang.getEquipmentNames()
         .sort((a, b) => ns.gang.getEquipmentCost(a) - ns.gang.getEquipmentCost(b));
+
     for (let m of ns.gang.getMemberNames()) {
         let info = ns.gang.getMemberInformation(m);
         for (let eq of equips) {
             if (info.upgrades.includes(eq) || info.augmentations.includes(eq)) continue;
             let cost = ns.gang.getEquipmentCost(eq);
-            let budget = ns.getServerMoneyAvailable("home") * budgetPct;
 
-            // Hacker gang tetap butuh Weapon, Armor & Vehicle jika ingin bertahan di Territory Warfare
-            if (cost <= budget && ns.gang.purchaseEquipment(m, eq))
-                ns.print(`🛍️ ${eq} → ${m}`);
+            if (cost <= allowedBudget && ns.gang.purchaseEquipment(m, eq)) {
+                ns.print(`🛍️ ${eq} → ${m} (-$${ns.formatNumber(cost)})`);
+                allowedBudget -= cost; // Kunci gembok dana
+            }
         }
     }
 }

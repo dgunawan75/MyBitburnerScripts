@@ -82,22 +82,23 @@ export async function main(ns) {
 
         let minCombat = Math.min(strLvl, defLvl, dexLvl, agiLvl);
 
+        // Evaluasi stat mana yang harus dilatih SETIAP DETIK (Kunci perpindahan gym otomatis)
+        let statTrain = "Strength";
+        if (strLvl >= 50) statTrain = "Defense";
+        if (strLvl >= 50 && defLvl >= 50) statTrain = "Dexterity";
+        if (strLvl >= 50 && defLvl >= 50 && dexLvl >= 50) statTrain = "Agility";
+
         if (isIdle) {
             // A. Kejar Hack 50 
             if (hackLvl < 50) {
                 if (ns.singularity.universityCourse("Rothman University", "Study Computer Science", false)) {
-                    ns.print("🎓 [STUDY] Auto-Kuliah Ilmu Komputer (Kejar Hack Lvl 50)");
+                    ns.print("� [STUDY] Auto-Kuliah Ilmu Komputer (Kejar Hack Lvl 50)");
                 }
             }
             // B. Mampir ke GYM (Target Base Stat 50, Bebas Ngutang jika miskin)
             else if (minCombat < 50) {
-                let statTrain = "Strength";
-                if (strLvl >= 50) statTrain = "Defense";
-                if (strLvl >= 50 && defLvl >= 50) statTrain = "Dexterity";
-                if (strLvl >= 50 && defLvl >= 50 && dexLvl >= 50) statTrain = "Agility";
-
                 ns.singularity.gymWorkout("Powerhouse Gym", statTrain, false);
-                ns.print(`🏋️ [GYM] Latihan (Boleh Utang): Membentuk ${statTrain} (Target Semua 50)...`);
+                ns.print(`�️ [GYM] Latihan (Boleh Utang): Membentuk ${statTrain} (Target Semua 50)...`);
             }
             // C. Jika Hacking dan Tubuh kuat sudah ada, jadilah preman
             else if (money < 15_000_000) {
@@ -114,25 +115,42 @@ export async function main(ns) {
         } else {
             if (currentWork.type === "CLASS" && currentWork.classType === "COMPUTER SCIENCE" && hackLvl >= 50) {
                 ns.singularity.stopAction();
-            } else if (currentWork.type === "CLASS" && currentWork.classType !== "COMPUTER SCIENCE" && minCombat >= 50) {
-                ns.singularity.stopAction();
-                ns.print("🏋️ [GYM] Seluruh 4 Statistik fisik mencapai 50. Siap membunuh di jalanan!");
+            } else if (currentWork.type === "CLASS" && currentWork.classType !== "COMPUTER SCIENCE") {
+                if (minCombat >= 50) {
+                    ns.singularity.stopAction();
+                    ns.print("🏋️ [GYM] Seluruh 4 Statistik fisik mencapai 50. Siap membunuh di jalanan!");
+                } else {
+                    // PENTING: Mendorong transisi otomatis antar-stat
+                    ns.singularity.gymWorkout("Powerhouse Gym", statTrain, false);
+                }
             } else if (currentWork.type === "CRIME" && money >= 15_000_000) {
                 ns.singularity.stopAction();
                 ns.print("💰 [GRINDING] Uang modal minimum telah terkumpul ($15 Juta)!");
             }
         }
 
-        // 6. AUTO-SWITCH ENGINE (Hanya Level 50 Langsung Pindah ke HWGW)
+        // 6. AUTO-SWITCH ENGINE (Logika Penyatuan V4 dan Brain)
+        let brainScript = "/ai/brain.js";
         let hwgwEngine = "/pro-v4/dist-hwgw-v4.js";
 
-        if (hackLvl >= 50) {
-            if (!ns.isRunning(hwgwEngine, "home") && ns.fileExists(hwgwEngine, "home")) {
-                let xpScript = "/pro-v4/xp-farm.js";
-                if (ns.isRunning(xpScript, "home")) ns.kill(xpScript, "home");
+        if (hackLvl < 50) {
+            if (!ns.isRunning(brainScript, "home") && ns.fileExists(brainScript, "home")) {
+                if (ns.isRunning(hwgwEngine, "home")) ns.kill(hwgwEngine, "home");
 
+                ns.run(brainScript);
+                ns.print(`🌱 [ENGINE] Hack Lvl 0-49: Menjalankan Brain Engine Awal: ${brainScript}`);
+            }
+        } else if (hackLvl >= 50) {
+            // Ketika menyentuh level 50, script ini mengecek apakah brain.js masih menyala. Jika iya, dimatikan:
+            if (ns.isRunning(brainScript, "home")) {
+                ns.kill(brainScript, "home");
+                ns.print("🛑 [ENGINE] Hack Lvl 50 Tercapai! Menghentikan Brain Engine Lama...");
+            }
+
+            // Putaran biasa menyalakan V4
+            if (!ns.isRunning(hwgwEngine, "home") && ns.fileExists(hwgwEngine, "home")) {
                 ns.run(hwgwEngine);
-                ns.print(`💥 [ENGINE] Level 50 Tercapai! Menyalakan Mesin Pencari Uang: ${hwgwEngine}`);
+                ns.print(`💥 [ENGINE] Pindah ke Mesin Pencari Uang: ${hwgwEngine}`);
             }
         }
 

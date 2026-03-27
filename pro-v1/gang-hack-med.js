@@ -75,18 +75,31 @@ function manageAscension(ns, threshold) {
 }
 
 function buyEquipment(ns, budgetPct) {
+    let money = ns.getServerMoneyAvailable("home");
+    let reserve = 100_000_000; // Dana darurat minimal $100 Juta tidak boleh diganggu gugat
+    if (money < reserve) return;
+
+    // Hitung budget 1x per siklus: (Sisa Uang - Dana Darurat) * 20%
+    let allowedBudget = (money - reserve) * budgetPct;
+
     let equips = ns.gang.getEquipmentNames()
         .sort((a, b) => ns.gang.getEquipmentCost(a) - ns.gang.getEquipmentCost(b));
+
     for (let m of ns.gang.getMemberNames()) {
         let info = ns.gang.getMemberInformation(m);
         for (let eq of equips) {
             if (info.upgrades.includes(eq) || info.augmentations.includes(eq)) continue;
             let cost = ns.gang.getEquipmentCost(eq);
-            let budget = ns.getServerMoneyAvailable("home") * budgetPct;
+            let stats = ns.gang.getEquipmentStats(eq);
 
-            // Hacker gang tetap butuh Weapon, Armor & Vehicle jika ingin bertahan di Territory Warfare
-            if (cost <= budget && ns.gang.purchaseEquipment(m, eq))
-                ns.print(`🛍️ ${eq} → ${m}`);
+            // FASE MED: Boikot beli senjata/armor tempur murni yang harganya > $25 Juta! (Hemat uang di awal)
+            let isPureCombat = (stats.str || stats.def || stats.dex || stats.agi) && !stats.hack && !stats.cha;
+            if (isPureCombat && cost > 25_000_000) continue;
+
+            if (cost <= allowedBudget && ns.gang.purchaseEquipment(m, eq)) {
+                ns.print(`🛍️ ${eq} → ${m} (-$${ns.formatNumber(cost)})`);
+                allowedBudget -= cost; // Kunci perlindungan: kurangi sisa jatah budget agar tidak bablas!
+            }
         }
     }
 }
