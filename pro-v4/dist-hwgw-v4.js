@@ -7,7 +7,6 @@ export async function main(ns) {
     // =============== KONFIGURASI ===============
     const T_DELAY = 50;
     const HAS_FORMULAS = ns.fileExists("Formulas.exe", "home");
-    const MAX_CONCURRENT_TARGETS = 10; // Capped to top 10 servers to guarantee CPU/RAM efficiency
     const MAX_STEAL_CAP = 0.35; // Maksimal steal 35% agar RAM cukup tersebar ke target lain
 
     // =============== PARSING ARGUMEN ===============
@@ -53,10 +52,20 @@ export async function main(ns) {
     // Main Engine Loop (Non-blocking Target Scheduler)
     while (true) {
         let workers = filterWorkers(getWorkers(ns), WORKER_MODE);
-        // Selalu ambil target terbaik (kalau level berubah maka prioritas akan geser dinamis!)
-        let topTargets = getTopTargets(ns, HAS_FORMULAS, MAX_CONCURRENT_TARGETS, workers);
 
-        if (Math.random() < 0.1) ns.print(`\n--- 🔄 SIKLUS EVALUASI JARINGAN [${new Date().toLocaleTimeString()}] ---`);
+        let totalFreeRam = calcTotalRam(ns, workers);
+        let maxTargets = 3;
+        if (totalFreeRam > 1000) maxTargets = 5;
+        if (totalFreeRam > 4000) maxTargets = 8;
+        if (totalFreeRam > 10000) maxTargets = 12;
+        if (totalFreeRam > 50000) maxTargets = 15;
+        if (totalFreeRam > 200000) maxTargets = 20;
+        if (totalFreeRam > 1000000) maxTargets = 30;
+
+        // Selalu ambil target terbaik (kalau level berubah maka prioritas akan geser dinamis!)
+        let topTargets = getTopTargets(ns, HAS_FORMULAS, maxTargets, workers);
+
+        if (Math.random() < 0.1) ns.print(`\n--- 🔄 SIKLUS JARINGAN: ${ns.formatRam(totalFreeRam)} FREE RAM | TARGET: TOP ${maxTargets} SERVER [${new Date().toLocaleTimeString()}] ---`);
 
         for (let target of topTargets) {
             let now = Date.now();
