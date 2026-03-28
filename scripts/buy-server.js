@@ -3,8 +3,8 @@ export async function main(ns) {
     // Tampilkan Harga Jika dijalankan tanpa Parameter (run scripts/buy-server.js)
     if (ns.args.length === 0) {
         ns.tprint("===== DAFTAR HARGA PERSONAL SERVER =====");
-        ns.tprint("Gunakan perintah: run scripts/buy-server.js [RAM]");
-        ns.tprint("Contoh: run scripts/buy-server.js 1024\n");
+        ns.tprint("Gunakan perintah: run scripts/buy-server.js [KODE NOMOR]");
+        ns.tprint("Contoh jika ingin RAM 1 TB [Kode 10] : run scripts/buy-server.js 10\n");
 
         for (let i = 1; i <= 20; i++) { // Limit 1 PetaByte (Max)
             let ram = Math.pow(2, i);
@@ -16,13 +16,16 @@ export async function main(ns) {
         return;
     }
 
-    let targetRam = parseInt(ns.args[0]);
+    let targetIndex = parseInt(ns.args[0]);
 
-    // Validasi Kelipatan 2 (Hukum RAM Komputer)
-    if (isNaN(targetRam) || Math.log2(targetRam) % 1 !== 0) {
-        ns.tprint("❌ ERROR: RAM harus diisi angka bulat kelipatan pangkat 2! (Contoh: 8, 16, 256, 1024, 4096, 1048576)");
+    // Validasi Index Pembelian (1 hingga 20)
+    if (isNaN(targetIndex) || targetIndex < 1 || targetIndex > 20) {
+        ns.tprint("❌ ERROR: Harap masukkan [KODE NOMOR] dari tabel (antara 1 sampai 20)!");
+        ns.tprint("💡 Ketik 'run scripts/buy-server.js' tanpa embel-embel angka untuk melihat kode.");
         return;
     }
+
+    let targetRam = Math.pow(2, targetIndex);
 
     let cost = ns.getPurchasedServerCost(targetRam);
     let money = ns.getServerMoneyAvailable("home");
