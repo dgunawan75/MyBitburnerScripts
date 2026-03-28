@@ -14,7 +14,6 @@ export async function main(ns) {
     ];
 
     while (true) {
-        let config = readConfig(ns);
         let money = ns.getServerMoneyAvailable("home");
         let player = ns.getPlayer();
         let hackLvl = player.skills ? player.skills.hacking : player.hacking;
@@ -70,7 +69,7 @@ export async function main(ns) {
 
         // 4. AUTO-UPGRADE RAM
         let ramCost = ns.singularity.getUpgradeHomeRamCost();
-        if (ramCost > 0 && money >= config.reserve + ramCost) {
+        if (ramCost > 0 && money >= ramCost * 5) {
             if (ns.singularity.upgradeHomeRam()) {
                 ns.print(`💻 [UPGRADE] Menggandakan RAM Home menjadi ${ns.getServerMaxRam("home")}GB!`);
                 money -= ramCost;
@@ -155,7 +154,7 @@ export async function main(ns) {
             }
         }
 
-        // 8. AUTO-BUAT GANG (Cuma Create, Launching diurus Master Board)
+        // 7. AUTO-BUAT GANG
         let karma = 0;
         try { karma = ns.heart.break(); } catch (e) { }
 
@@ -166,60 +165,17 @@ export async function main(ns) {
                 } else if (ns.singularity.joinFaction("The Black Hand")) {
                     if (ns.gang.createGang("The Black Hand")) ns.print("💀 [GANG] The Black Hand dijadikan Hacking Gang!");
                 }
-            }
-        }
-
-        // 9. MASTER BOARD SCRIPT MANAGER
-        const SCRIPTS = {
-            "auto-pserv": "/ai/auto-pserv.js",
-            "auto-worker": "/ai/auto-worker.js",
-            "stock": "/ai/stock-master-v4.js",
-            "gang-med": "/pro-v1/gang-hack-med.js",
-            "gang-war": "/pro-v1/gang-hack-war.js"
-        };
-
-        for (let [key, path] of Object.entries(SCRIPTS)) {
-            if (config[key] !== undefined) {
-                let isRunning = ns.isRunning(path, "home");
-                let shouldRun = config[key] === 1;
-
-                // Safety: Gang script tidak boleh jalan kalau belum punya geng
-                if ((key === "gang-med" || key === "gang-war") && !ns.gang.inGang()) shouldRun = false;
-                // Safety: Jika war ON, matikan paksa med agar tidak rebutan equipment
-                if (key === "gang-med" && config["gang-war"] === 1) shouldRun = false;
-
-                if (shouldRun && !isRunning && ns.fileExists(path, "home")) {
-                    ns.run(path);
-                    ns.print(`▶️ [MASTER BOARD] ON: Menyalakan ${key}`);
-                } else if (!shouldRun && isRunning) {
-                    ns.kill(path, "home");
-                    ns.print(`🛑 [MASTER BOARD] OFF: Mematikan ${key}`);
+            } else {
+                let gangMed = "/pro-v1/gang-hack-med.js";
+                if (!ns.isRunning(gangMed, "home") && ns.fileExists(gangMed, "home")) {
+                    ns.run(gangMed);
+                    ns.print(`💀 [GANG] Auto-Launch Pengurus GENG: ${gangMed}`);
                 }
             }
         }
 
-        await ns.sleep(5000); // Dipercepat 5 dtk agar config lebih real-time
+        await ns.sleep(10000);
     }
-}
-
-// Master Config Parser
-function readConfig(ns) {
-    let cfg = { reserve: 10e9, "auto-pserv": 0, "auto-worker": 0, stock: 0, "gang-med": 0, "gang-war": 0 };
-    let raw = ns.read("config.txt");
-    if (!raw) return cfg;
-    for (let line of raw.split("\n")) {
-        let p = line.trim().split(/[\s:]+/);
-        if (p.length >= 2 && !line.startsWith("#")) {
-            let key = p[0].toLowerCase();
-            let val = p[1].toLowerCase();
-            if (key === "reserve") {
-                let m = 1;
-                if (val.endsWith("m")) m = 1e6; else if (val.endsWith("b")) m = 1e9; else if (val.endsWith("t")) m = 1e12;
-                cfg[key] = parseFloat(val) * m;
-            } else cfg[key] = parseInt(val) || 0;
-        }
-    }
-    return cfg;
 }
 
 // Helper Scanner

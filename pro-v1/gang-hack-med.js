@@ -76,10 +76,9 @@ function manageAscension(ns, threshold) {
 
 function buyEquipment(ns, budgetPct) {
     let money = ns.getServerMoneyAvailable("home");
-    let reserve = 100_000_000; // Dana darurat minimal $100 Juta tidak boleh diganggu gugat
+    let reserve = getReserve(ns);
     if (money < reserve) return;
 
-    // Hitung budget 1x per siklus: (Sisa Uang - Dana Darurat) * 20%
     let allowedBudget = (money - reserve) * budgetPct;
 
     let equips = ns.gang.getEquipmentNames()
@@ -146,4 +145,19 @@ function assignTasks(ns, gangInfo, wantedLimit, minHack, powerRatio) {
         }
     }
     ns.print(`⚡ Power Builders: ${warAssigned}/${members.length} anggota`);
+}
+
+function getReserve(ns) {
+    let raw = ns.read("config.txt");
+    if (!raw) return 100_000_000;
+    for (let line of raw.split("\n")) {
+        let p = line.trim().split(/[\s:]+/);
+        if (p.length >= 2 && p[0].toLowerCase() === "reserve") {
+            let v = p[1].toLowerCase();
+            let m = 1;
+            if (v.endsWith("k")) m = 1e3; else if (v.endsWith("m")) m = 1e6; else if (v.endsWith("b")) m = 1e9; else if (v.endsWith("t")) m = 1e12;
+            return parseFloat(v) * m;
+        }
+    }
+    return 100_000_000;
 }

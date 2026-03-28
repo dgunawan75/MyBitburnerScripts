@@ -35,23 +35,25 @@ export async function main(ns) {
     ns.print(` 💻 Workers  : ${WORKER_MODE_LABEL}`);
     ns.print(`=========================================`);
 
-    let initialWorkers = filterWorkers(getWorkers(ns), WORKER_MODE);
-    for (let s of initialWorkers) {
-        if (s !== "home") {
-            await ns.scp([
-                "/pro-v3/payload/hack.js",
-                "/pro-v3/payload/grow.js",
-                "/pro-v3/payload/weaken1.js",
-                "/pro-v3/payload/weaken2.js"
-            ], s, "home");
-        }
-    }
-
     let targetLocks = {}; // { "serverName": timestamp_unlock }
+    let initializedWorkers = new Set(["home"]); // Lacak server yang sudah di-inject payload
 
     // Main Engine Loop (Non-blocking Target Scheduler)
     while (true) {
         let workers = filterWorkers(getWorkers(ns), WORKER_MODE);
+
+        // AUTO-SYNC: Deteksi server baru (pserv hasil beli manual/auto) dan injeksi payload!
+        for (let s of workers) {
+            if (!initializedWorkers.has(s)) {
+                await ns.scp([
+                    "/pro-v3/payload/hack.js",
+                    "/pro-v3/payload/grow.js",
+                    "/pro-v3/payload/weaken1.js",
+                    "/pro-v3/payload/weaken2.js"
+                ], s, "home");
+                initializedWorkers.add(s);
+            }
+        }
 
         let totalFreeRam = calcTotalRam(ns, workers);
         let maxTargets = 3;
@@ -184,8 +186,8 @@ function performPrep(ns, target, workers, hasFormulas, isWeakenNeeded, sec, minS
         let t = Math.floor(free / ns.getScriptRam(script));
         t = Math.min(t, threadsNeeded - totalSended);
         if (t > 0) {
-            ns.exec(script, server, t, target, 0, "PREP", Math.random());
-            totalSended += t;
+            let pid = ns.exec(script, server, t, target, 0, "PREP", Math.random());
+            if (pid > 0) totalSended += t;
         }
     }
 
@@ -321,8 +323,8 @@ function runDistributed(ns, script, target, threadsLeft, delay, batchNumber, wor
 
         let use = Math.min(possible, threadsLeft);
         if (use > 0) {
-            ns.exec(script, server, use, target, delay, batchNumber, Math.random());
-            threadsLeft -= use;
+            let pid = ns.exec(script, server, use, target, delay, batchNumber, Math.random());
+            if (pid > 0) threadsLeft -= use;
         }
         if (threadsLeft <= 0) return;
     }

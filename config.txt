@@ -1,0 +1,11 @@
+# MASTER BOARD - SYSTEM CONFIGURATION
+# Ubah angka di file ini, Orchestrator akan membaca dan bereaksi secara Real-Time!
+# 1 = ON (Jalankan Script) | 0 = OFF (Matikan Script)
+# Format Value Bebas: 10b = 10 Billion, 100m = 100 Million, dst.
+
+reserve 10b
+auto-pserv 1
+auto-worker 1
+stock 0
+gang-med 1
+gang-war 0

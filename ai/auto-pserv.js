@@ -10,11 +10,17 @@ export async function main(ns) {
 
     while (true) {
         let money = ns.getServerMoneyAvailable("home");
+        let reserve = getReserve(ns);
+
+        if (money < reserve) {
+            await ns.sleep(30000);
+            continue;
+        }
 
         // PENTING: Batas ukurannya adalah HARUS LEBIH KECIL dari 2% total uang kas Anda.
         // Jika kita di ambang batas 2%, meskipun kita merombak 25 server sekaligus, 
         // total pengeluarannya hanya memakan 50% tabungan utuh! Sangat Sangat Aman!
-        let allowedCost = money * 0.02;
+        let allowedCost = (money - reserve) * 0.02;
         let maxAffordableRam = 0;
 
         // Cek mulai dari dewa (1 PB) trus turun ke MIN_RAM
@@ -62,4 +68,20 @@ export async function main(ns) {
         // Putaran santai perlahan agar tidak menguras CPU
         await ns.sleep(30000);
     }
+}
+
+// Terhubung dengan MASTER BOARD
+function getReserve(ns) {
+    let raw = ns.read("config.txt");
+    if (!raw) return 100_000_000;
+    for (let line of raw.split("\n")) {
+        let p = line.trim().split(/[\s:]+/);
+        if (p.length >= 2 && p[0].toLowerCase() === "reserve") {
+            let v = p[1].toLowerCase();
+            let m = 1;
+            if (v.endsWith("k")) m = 1e3; else if (v.endsWith("m")) m = 1e6; else if (v.endsWith("b")) m = 1e9; else if (v.endsWith("t")) m = 1e12;
+            return parseFloat(v) * m;
+        }
+    }
+    return 100_000_000;
 }

@@ -52,38 +52,12 @@ export async function main(ns) {
     // Formula dasar: Beli yang PALING MAHAL lebih dulu.
     availableAugs.sort((a, b) => b.baseCost - a.baseCost);
 
-    // 3. DEPENDENCY (Prereq) RESOLUTION
-    // Jika sebuah augment butuh augment lain, kita TIDAK BISA membelinya lebih awal.
-    // Kita harus menggeser augment PRASYARAT agar dibeli sebelum augment utamanya.
-    let finalOrder = [];
-    let boughtInSim = [...ownedAugs];
-
-    // Fungsi rekursif untuk menambahkan prasyarat lebih dulu
-    function addToOrder(aug) {
-        if (finalOrder.includes(aug)) return;
-
-        // Cek prasyarat
-        for (let pre of aug.prereqs) {
-            if (!boughtInSim.includes(pre)) {
-                // Cari data prasyarat di daftar yang tersedia
-                let preData = availableAugs.find(x => x.name === pre);
-                if (preData) {
-                    addToOrder(preData);
-                } else {
-                    // Prasyarat tidak bisa dibeli (reputasi kurang dll)
-                    return false;
-                }
-            }
-        }
-
-        finalOrder.push(aug);
-        boughtInSim.push(aug.name);
-        return true;
-    }
-
-    for (let aug of availableAugs) {
-        addToOrder(aug);
-    }
+    // 3. KEPUTUSAN HARGA MURNI (SIMPLE DESCENDING)
+    // Berkat ide Anda, skrip tidak akan lagi memaksa menaikkan Prasyarat Augment Murah ke atas.
+    // Jika prasyaratnya kebetulan dibeli lebih dulu (karena secara alami lebih mahal), ia akan dibeli.
+    // Tetapi jika prasyaratnya lebih murah, skrip akan melewatinya dan lanjut berburu augment mahal lainnya
+    // demi menyelamatkan pengali inflasi 1.9x untuk run selanjutnya.
+    let finalOrder = availableAugs;
 
     // 4. KALKULASI HARGA TOTAL (Dengan eksponen 1.9x)
     let totalCost = 0;
@@ -95,18 +69,29 @@ export async function main(ns) {
     for (let i = 0; i < finalOrder.length; i++) {
         let aug = finalOrder[i];
 
-        // Harga Asli x (1.9 ^ jumlah augment yang sudah dibeli di siklus ini)
-        let actualPrice = aug.baseCost * Math.pow(PRICE_MULTI, i);
+        let canBuy = true;
+        for (let pre of aug.prereqs) {
+            if (!ownedAugs.includes(pre) && !affordableOrder.find(x => x.name === pre)) {
+                canBuy = false;
+                break;
+            }
+        }
+
+        if (!canBuy) {
+            continue;
+        }
+
+        // Harga Asli x (1.9 ^ jumlah augment AKTUAL di keranjang)
+        let actualPrice = aug.baseCost * Math.pow(PRICE_MULTI, affordableOrder.length);
 
         if (money >= totalCost + actualPrice) {
             totalCost += actualPrice;
             affordableOrder.push(aug);
             let costStr = ns.formatNumber(actualPrice);
             let baseStr = ns.formatNumber(aug.baseCost);
-            ns.print(` [${i + 1}] ${aug.name} | Harga asli: $${baseStr} -> Kena Inflasi: $${costStr}`);
+            ns.print(` [${affordableOrder.length}] ${aug.name} | Harga asli: $${baseStr} -> Kena Inflasi: $${costStr}`);
         } else {
-            ns.print(` ❌ [TIDAK CUKUP UANG] ${aug.name} butuh $${ns.formatNumber(actualPrice)}, sisa uang: $${ns.formatNumber(money - totalCost)}`);
-            break; // Jika 1 gagal dibeli karena kemahalan, stop rantainya.
+            // Uang tidak cukup. Lewati secara diam-diam dan cari augment yang lebih murah.
         }
     }
 
