@@ -175,7 +175,8 @@ export async function main(ns) {
             "auto-worker": "/ai/auto-worker.js",
             "stock": "/ai/stock-master-v4.js",
             "gang-med": "/pro-v1/gang-hack-med.js",
-            "gang-war": "/pro-v1/gang-hack-war.js"
+            "gang-war": "/pro-v1/gang-hack-war.js",
+            "backdoor": "/ai/auto-backdoor.js"
         };
 
         for (let [key, path] of Object.entries(SCRIPTS)) {

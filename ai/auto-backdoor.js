@@ -1,3 +1,5 @@
+import { rootServer } from "/modules/rooter.js"
+
 /** @param {NS} ns */
 export async function main(ns) {
     ns.disableLog("ALL");
@@ -11,6 +13,7 @@ export async function main(ns) {
     let hackingLevel = ns.getHackingLevel();
     let backdoorCount = 0;
 
+
     // Fungsi rekursif DFS nyata (menggerakkan terminal pemain langkah demi langkah)
     async function scanAndBackdoor(currentServer, parentServer) {
         // Cek target di mana terminal sedang berada
@@ -18,6 +21,11 @@ export async function main(ns) {
             let hasRoot = ns.hasRootAccess(currentServer);
             let reqLevel = ns.getServerRequiredHackingLevel(currentServer);
             let isBackdoored = ns.getServer(currentServer).backdoorInstalled;
+
+            if (!hasRoot) {
+                rootServer(ns, currentServer);
+                hasRoot = ns.hasRootAccess(currentServer);
+            }
 
             if (hasRoot && ns.getHackingLevel() >= reqLevel && !isBackdoored) {
                 ns.print(`[+] Ditemukan celah backdoor di: ${currentServer}`);
