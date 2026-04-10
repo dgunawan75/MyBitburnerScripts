@@ -130,28 +130,37 @@ export async function main(ns) {
             }
         }
 
-        // 6. AUTO-SWITCH ENGINE (Logika Penyatuan V4 dan Brain)
+        // 6. AUTO-SWITCH ENGINE (3-Fase: Brain -> Early HWGW -> Full HWGW V4)
         let brainScript = "/ai/brain.js";
-        let hwgwEngine = "/pro-v4/dist-hwgw-v4.js";
+        let earlyEngine = "/pro-v4/dist-hwgw-v4-early.js";
+        let fullEngine = "/pro-v4/dist-hwgw-v5.js";
+        let hasFormulas = ns.fileExists("Formulas.exe", "home");
 
+        // FASE 1: Level 0-49 — Hanya Brain.js
         if (hackLvl < 50) {
+            if (ns.isRunning(earlyEngine, "home")) { ns.kill(earlyEngine, "home"); ns.print("🛑 [ENGINE] Stop Early HWGW."); }
+            if (ns.isRunning(fullEngine, "home")) { ns.kill(fullEngine, "home"); ns.print("🛑 [ENGINE] Stop Full HWGW."); }
             if (!ns.isRunning(brainScript, "home") && ns.fileExists(brainScript, "home")) {
-                if (ns.isRunning(hwgwEngine, "home")) ns.kill(hwgwEngine, "home");
-
                 ns.run(brainScript);
-                ns.print(`🌱 [ENGINE] Hack Lvl 0-49: Menjalankan Brain Engine Awal: ${brainScript}`);
+                ns.print("🌱 [ENGINE] Fase 1: Brain Engine (Kejar Hack Lvl 50)");
             }
-        } else if (hackLvl >= 50) {
-            // Ketika menyentuh level 50, script ini mengecek apakah brain.js masih menyala. Jika iya, dimatikan:
-            if (ns.isRunning(brainScript, "home")) {
-                ns.kill(brainScript, "home");
-                ns.print("🛑 [ENGINE] Hack Lvl 50 Tercapai! Menghentikan Brain Engine Lama...");
+        }
+        // FASE 2: Level >=50 tapi belum ada Formulas.exe — Early HWGW
+        else if (hackLvl >= 50 && !hasFormulas) {
+            if (ns.isRunning(brainScript, "home")) { ns.kill(brainScript, "home"); ns.print("🛑 [ENGINE] Stop Brain."); }
+            if (ns.isRunning(fullEngine, "home")) { ns.kill(fullEngine, "home"); ns.print("🛑 [ENGINE] Stop Full HWGW."); }
+            if (!ns.isRunning(earlyEngine, "home") && ns.fileExists(earlyEngine, "home")) {
+                ns.run(earlyEngine);
+                ns.print("⚡ [ENGINE] Fase 2: Early HWGW Engine (Tanpa Formulas)");
             }
-
-            // Putaran biasa menyalakan V4
-            if (!ns.isRunning(hwgwEngine, "home") && ns.fileExists(hwgwEngine, "home")) {
-                ns.run(hwgwEngine);
-                ns.print(`💥 [ENGINE] Pindah ke Mesin Pencari Uang: ${hwgwEngine}`);
+        }
+        // FASE 3: Formulas.exe sudah ada — Full HWGW V4 (Presisi & Efisien Penuh)
+        else if (hackLvl >= 50 && hasFormulas) {
+            if (ns.isRunning(brainScript, "home")) { ns.kill(brainScript, "home"); ns.print("🛑 [ENGINE] Stop Brain."); }
+            if (ns.isRunning(earlyEngine, "home")) { ns.kill(earlyEngine, "home"); ns.print("🛑 [ENGINE] Stop Early HWGW → Naik Kelas!"); }
+            if (!ns.isRunning(fullEngine, "home") && ns.fileExists(fullEngine, "home")) {
+                ns.run(fullEngine);
+                ns.print("💥 [ENGINE] Fase 3: Full HWGW V4 (Formulas Presisi Aktif)!");
             }
         }
 
