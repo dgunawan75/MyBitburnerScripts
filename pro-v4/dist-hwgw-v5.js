@@ -65,10 +65,15 @@ export async function main(ns) {
 
         let totalFreeRam = calcTotalRam(ns, workers);
 
-        // maxTargets adaptif RAM
+        // maxTargets adaptif RAM — semulus mungkin menyerap miliaran RAM
         let maxTargets = 1;
-        if (totalFreeRam > 30000) maxTargets = 3;
-        if (totalFreeRam > 100000) maxTargets = 4;
+        if (totalFreeRam > 64) maxTargets = 2;
+        if (totalFreeRam > 512) maxTargets = 4;
+        if (totalFreeRam > 2000) maxTargets = 7;
+        if (totalFreeRam > 8000) maxTargets = 12;
+        if (totalFreeRam > 30000) maxTargets = 20;
+        if (totalFreeRam > 100000) maxTargets = 30;
+        if (totalFreeRam > 500000) maxTargets = 50;
 
         // Steal cap per loop naik seiring RAM tersedia
         let stealCap = BASE_STEAL_CAP;
@@ -91,7 +96,10 @@ export async function main(ns) {
         }
 
         let now = Date.now();
-        // Hanya 1 target boleh prep bersamaan untuk menghindari RAM starvation
+
+        // Late-Game: Izinkan lebih banyak server melakukan prep bersamaan secara dinamis
+        // 1 slot prep untuk setiap 2000 GB (2TB) RAM tersisa di jaringan
+        let maxConcurrentPreps = Math.max(1, Math.floor(totalFreeRam / 2000));
         let numPrepping = targets.filter(t => targetLocks[t] && now < targetLocks[t] && isPrepping(t, ns)).length;
 
         for (let target of targets) {
@@ -113,7 +121,9 @@ export async function main(ns) {
             let needGrow = money < maxMoney * growThreshold;
 
             if (needWeaken || needGrow) {
-                if (numPrepping >= 1) continue; // Satu prep sekaligus
+                // Di early game (RAM kecil), batasi prep agar tidak rebutan. 
+                // Di late game (RAM > puluhan TB), izinkan prep massal
+                if (numPrepping >= maxConcurrentPreps) continue;
 
                 let prepTime = performPrep(ns, target, workers, needWeaken, needGrow, sec, minSec, money, maxMoney, BN);
                 if (prepTime > 0) {
@@ -249,7 +259,9 @@ function getTopTargets(ns, hasFormulas, limit, BN) {
         let maxMoney = ns.getServerMaxMoney(s);
         if (maxMoney <= 0) continue;
         let reqHack = ns.getServerRequiredHackingLevel(s);
-        if (reqHack > ns.getHackingLevel() / 2) continue;
+        // Hapus limit "/ 2". Skor sudah memperhitungkan waktu Weaken (yang secara alami penalti untuk hack tinggi)
+        // Hanya hindari server yang memang secara mutlak dilarang dihack oleh game system.
+        if (reqHack > ns.getHackingLevel()) continue;
 
         let score;
         if (hasFormulas) {

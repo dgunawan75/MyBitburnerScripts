@@ -51,15 +51,21 @@ export async function main(ns) {
         }
 
         if (targetFaction) {
-            let working = false;
-            // Gunakan metode Hacking Contracts karena stat Hack pemain murni paling tinggi biasa
-            if (ns.singularity.workForFaction(targetFaction, "Hacking Contracts", false)) working = true;
-            else if (ns.singularity.workForFaction(targetFaction, "Field Work", false)) working = true;
-            else if (ns.singularity.workForFaction(targetFaction, "Security Work", false)) working = true;
+            // Cegah script mengulang perintah kerja jika pemain SUDAH bekerja untuk faksi ini
+            // Ini mencegah layar pemain dipaksa kembali ke mode fokus setiap 60 detik
+            if (currentWork && currentWork.type === "FACTION" && currentWork.factionName === targetFaction) {
+                ns.print(`⏳ Masih bekerja (Fokus) untuk ${targetFaction}. Menunggu reputasi naik...`);
+            } else {
+                let working = false;
+                // Parameter ke-3 dirubah menjadi TRUE agar masuk mode Fokus untuk bonus reputasi
+                if (ns.singularity.workForFaction(targetFaction, "Hacking Contracts", true)) working = true;
+                else if (ns.singularity.workForFaction(targetFaction, "Field Work", true)) working = true;
+                else if (ns.singularity.workForFaction(targetFaction, "Security Work", true)) working = true;
 
-            if (working) {
-                ns.print(`👔 DIKONTRAK! Meretas rahasia demi Faksi: ${targetFaction}`);
-                ns.print(`   > Mengejar Augment Langka: ${targetAug} (Butuh: +${ns.formatNumber(maxRepOff)} Reputasi)`);
+                if (working) {
+                    ns.print(`👔 DIKONTRAK! Meretas rahasia demi Faksi: ${targetFaction} (Mode Fokus: ON)`);
+                    ns.print(`   > Mengejar Augment Langka: ${targetAug} (Butuh: +${ns.formatNumber(maxRepOff)} Reputasi)`);
+                }
             }
         } else {
             // Semua faksi Non-Gang sudah selesai? (Bisa jadi idle)

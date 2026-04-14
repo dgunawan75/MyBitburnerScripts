@@ -25,7 +25,7 @@ export async function main(ns) {
 
     // Warfare
     const WAR_WIN_CHANCE_MIN = 0.55;  // Serang hanya jika win chance > 55%
-    const WAR_RETREAT_CHANCE = 0.45;  // Aktifkan retreat jika ada musuh > 55% menang lawan kita
+    const WAR_RETREAT_CHANCE = 0.65;  // Berani mengambil risiko 50/50. Mundur HANYA jika musuh > 65% menang.
     const MIN_MEMBERS_FOR_WAR = 8;     // Minimal 8 anggota sebelum berani perang
     const WARFARE_RATIO = 0.40;  // Maks 40% anggota terkuat dikirim ke "Turf War"
 
@@ -70,7 +70,7 @@ export async function main(ns) {
         // ============================================================
         // ANALISA MUSUH & WARFARE DECISION
         // ============================================================
-        let warDecision = analyzeWarfare(ns, others, members.length, WAR_WIN_CHANCE_MIN, WAR_RETREAT_CHANCE, MIN_MEMBERS_FOR_WAR);
+        let warDecision = analyzeWarfare(ns, others, members.length, WAR_WIN_CHANCE_MIN, WAR_RETREAT_CHANCE, MIN_MEMBERS_FOR_WAR, gangInfo.faction);
         ns.gang.setTerritoryWarfare(warDecision.engage);
 
         if (warDecision.engage) {
@@ -92,6 +92,7 @@ export async function main(ns) {
         ns.print("\n📊 Status Gang Lain:");
         let sortedGangs = Object.entries(others).sort((a, b) => b[1].territory - a[1].territory);
         for (let [name, info] of sortedGangs) {
+            if (name === gangInfo.faction) continue; // Jangan tampilkan geng kita sendiri
             if (info.territory <= 0) continue;
             let winChance = ns.gang.getChanceToWinClash(name);
             let icon = winChance >= WAR_WIN_CHANCE_MIN ? "✅" : "⚠️";
@@ -105,7 +106,7 @@ export async function main(ns) {
 // ============================================================
 // HELPER: Analisa kondisi perang dan keputusan engage/retreat
 // ============================================================
-function analyzeWarfare(ns, others, memberCount, winMin, retreatThreshold, minMembers) {
+function analyzeWarfare(ns, others, memberCount, winMin, retreatThreshold, minMembers, myFaction) {
     // Belum cukup anggota untuk perang
     if (memberCount < minMembers) {
         return { engage: false, targetGang: null, bestWinChance: 0, avoidGangs: [] };
@@ -117,6 +118,7 @@ function analyzeWarfare(ns, others, memberCount, winMin, retreatThreshold, minMe
     let shouldRetreat = false;
 
     for (let [name, info] of Object.entries(others)) {
+        if (name === myFaction) continue; // Abaikan geng kita sendiri dari kalkulasi
         if (info.territory <= 0) continue; // Gang sudah tidak punya wilayah
 
         let winChance = ns.gang.getChanceToWinClash(name);
