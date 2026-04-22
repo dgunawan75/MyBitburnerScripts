@@ -10,7 +10,7 @@ export async function main(ns) {
 
     if (!ns.gang.inGang()) {
         ns.print("❌ Anda belum membuat Gang!");
-        ns.print("👉 Silakan bergabung ke faksi (misal: Slum Snakes) lalu klik tab Faction -> Create Gang (Pilih Combat).");
+        ns.print("👉 Silakan bergabung ke faksi Hacker (misal: NiteSec / The Black Hand) lalu pilih HACKING Gang.");
         return;
     }
 
@@ -64,10 +64,10 @@ function manageAscension(ns, threshold) {
         let result = ns.gang.getAscensionResult(member);
         if (!result) continue;
 
-        let avgMultiplierGain = (result.str + result.def + result.dex + result.agi) / 4;
-        if (avgMultiplierGain >= threshold) {
+        let hackMultiplierGain = result.hack;
+        if (hackMultiplierGain >= threshold) {
             ns.gang.ascendMember(member);
-            ns.print(`✨ ASCENSION: ${member} naik level! (Multiplier Gain: ${avgMultiplierGain.toFixed(2)}x)`);
+            ns.print(`✨ ASCENSION: ${member} naik level! (Multiplier Gain: ${hackMultiplierGain.toFixed(2)}x)`);
         }
     }
 }
@@ -91,7 +91,8 @@ function buyEquipment(ns, budgetPercent) {
             let budget = ns.getServerMoneyAvailable("home") * budgetPercent;
 
             let equipStats = ns.gang.getEquipmentStats(equip);
-            if (equipStats.hack && !equipStats.str && !equipStats.def) continue;
+            // Hanya beli equip yang menambah statistik HACKING (Rootkits & Augmentasi spesifik)
+            if (!equipStats.hack) continue;
 
             if (cost <= budget) {
                 if (ns.gang.purchaseEquipment(member, equip)) {
@@ -109,32 +110,31 @@ function assignTasks(ns, gangInfo, wantedPenaltyLimit, minTrainingStat) {
     let members = ns.gang.getMemberNames();
     let wantedPenalty = gangInfo.wantedPenalty;
 
-    // Karena Terrorism menghasilkan Wanted yang sangat tinggi,
-    // kita butuh LBH BANYAK penyapu ranjau (Vigilante Justice) daripada versi biasa.
+    // Untuk Hacking Gang, Ethical Hacking adalah tugas penurunan Wanted
     let needVigilante = wantedPenalty < wantedPenaltyLimit && gangInfo.wantedLevel > 10;
 
-    // Alokasikan 30% - 40% anggota untuk bersih-bersih Wanted, sisanya Terrorism
+    // Alokasikan 30% - 40% anggota untuk bersih-bersih Wanted
     let maxVigilantes = Math.max(1, Math.floor(members.length * 0.35));
     let vigilanteAssigned = 0;
 
     for (let member of members) {
         let info = ns.gang.getMemberInformation(member);
-        let avgStats = (info.str + info.def + info.dex + info.agi) / 4;
+        let hackStat = info.hack;
         let pTask = info.task; // current task
         let nTask = ""; // new task
 
-        // Aturan 1: Anak baru disuruh sekolah (Train Combat)
-        if (avgStats < minTrainingStat) {
+        // Aturan 1: Anak baru disuruh sekolah 
+        if (hackStat < minTrainingStat) {
             nTask = "Train Hacking";
         }
-        // Aturan 2: Jika butuh penurun Wanted Level, sisihkan porsinya
-        else if (needVigilante && vigilanteAssigned < maxVigilantes && avgStats > minTrainingStat) {
-            nTask = "Vigilante Justice";
+        // Aturan 2: Turunkan Wanted Level
+        else if (needVigilante && vigilanteAssigned < maxVigilantes && hackStat > minTrainingStat) {
+            nTask = "Ethical Hacking";
             vigilanteAssigned++;
         }
-        // Aturan 3: SEMUA PREMAN FOKUS TERRORISM (Meskipun stats rendah)
+        // Aturan 3: SEMUA HACKER FOKUS CYBERTERRORISM (Raja Reputasi Hacker)
         else {
-            nTask = "Territory Warfare";
+            nTask = "Cyberterrorism";
         }
 
         if (nTask !== "" && pTask !== nTask) {
