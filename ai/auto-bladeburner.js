@@ -45,15 +45,15 @@ export async function main(ns) {
         ns.print("=========================================");
 
         let [stm, maxStm] = ns.bladeburner.getStamina();
-        let hp = ns.getPlayer().hp;
-        let maxHp = ns.getPlayer().max_hp;
+        let hp = ns.getPlayer().hp.current;
+        let maxHp = ns.getPlayer().hp.max;
         let city = ns.bladeburner.getCity();
         let chaos = ns.bladeburner.getCityChaos(city);
         let rank = ns.bladeburner.getRank();
         let sp = ns.bladeburner.getSkillPoints();
 
         ns.print(`🏙️ Lokasi   : ${city} (Chaos: ${chaos.toFixed(1)})`);
-        ns.print(`⭐ Rank     : ${ns.formatNumber(rank)} (Skill Pts: ${sp})`);
+        ns.print(`⭐ Rank     : ${rank.toLocaleString()} (Skill Pts: ${sp})`);
         ns.print(`❤️ Health   : ${hp} / ${maxHp}`);
         ns.print(`🏃 Stamina  : ${stm.toFixed(0)} / ${maxStm.toFixed(0)}`);
 
@@ -89,9 +89,9 @@ export async function main(ns) {
         // ==========================
         let nextBlackOp = getNextBlackOp(ns);
         if (nextBlackOp) {
-            let [min, max] = ns.bladeburner.getActionEstimatedSuccessChance("BlackOps", nextBlackOp.name);
+            let [min, max] = ns.bladeburner.getActionEstimatedSuccessChance("Black Operations", nextBlackOp.name);
             if (min >= BLACKOP_WIN_CHANCE && rank >= nextBlackOp.rank) {
-                await doAction(ns, "BlackOps", nextBlackOp.name, `☠️ MENJALANKAN BLACK OPS! Mengincar kemenangan!`);
+                await doAction(ns, "Black Operations", nextBlackOp.name, `☠️ MENJALANKAN BLACK OPS! Mengincar kemenangan!`);
                 continue;
             }
         }
@@ -103,11 +103,16 @@ export async function main(ns) {
 
         for (let op of OPS) {
             let count = ns.bladeburner.getActionCountRemaining(op.type, op.name);
-            let [min, max] = ns.bladeburner.getActionEstimatedSuccessChance(op.type, op.name);
-
-            if (count > 0 && min >= SAFE_WIN_CHANCE) {
-                bestAction = op;
-                break;
+            
+            if (count > 0) {
+                // Kalibrasi level misi sebelum mengecek peluang menang
+                optimizeActionLevel(ns, op.type, op.name);
+                
+                let [min, max] = ns.bladeburner.getActionEstimatedSuccessChance(op.type, op.name);
+                if (min >= SAFE_WIN_CHANCE) {
+                    bestAction = op;
+                    break;
+                }
             }
         }
 
@@ -152,7 +157,7 @@ async function doAction(ns, type, name, logText) {
 function getNextBlackOp(ns) {
     let blackOps = ns.bladeburner.getBlackOpNames();
     for (let name of blackOps) {
-        if (ns.bladeburner.getActionCountRemaining("BlackOps", name) > 0) {
+        if (ns.bladeburner.getActionCountRemaining("Black Operations", name) > 0) {
             let reqRank = ns.bladeburner.getBlackOpRank(name);
             return { name: name, rank: reqRank };
         }
@@ -195,7 +200,40 @@ function autoAssignTeam(ns) {
             ns.bladeburner.setTeamSize("Operations", op, 999999);
         }
         for (let op of blackOps) {
-            ns.bladeburner.setTeamSize("BlackOps", op, 999999);
+            ns.bladeburner.setTeamSize("Black Operations", op, 999999);
         }
     } catch { }
+}
+
+// Sistem Kalibrasi Level Otomatis (V3 Optimization)
+function optimizeActionLevel(ns, type, name) {
+    if (type === "Black Operations" || type === "General") return; // Hanya Operations & Contracts yang punya Level
+    
+    // Matikan fitur AutoLevel bawaan game yang terlalu gegabah
+    ns.bladeburner.setActionAutolevel(type, name, false);
+    
+    let currentLvl = ns.bladeburner.getActionCurrentLevel(type, name);
+    let maxLvl = ns.bladeburner.getActionMaxLevel(type, name);
+    let [min, max] = ns.bladeburner.getActionEstimatedSuccessChance(type, name);
+
+    // Jika peluang menangnya telalu kecil (Bahaya Mati), INSTAN turunkan level sampai aman
+    while (min < 0.85 && currentLvl > 1) {
+        currentLvl--;
+        ns.bladeburner.setActionLevel(type, name, currentLvl);
+        [min, max] = ns.bladeburner.getActionEstimatedSuccessChance(type, name);
+    }
+    
+    // Jika peluang menangnya sangat aman (>95%), INSTAN naikkan level untuk melipatgandakan Uang & Reputasi
+    while (min >= 0.95 && currentLvl < maxLvl) {
+        currentLvl++;
+        ns.bladeburner.setActionLevel(type, name, currentLvl);
+        [min, max] = ns.bladeburner.getActionEstimatedSuccessChance(type, name);
+        
+        // Jika kita terlalu rakus menaikkan level dan tiba-tiba bahaya, mundur 1 langkah
+        if (min < 0.85) {
+            currentLvl--;
+            ns.bladeburner.setActionLevel(type, name, currentLvl);
+            break;
+        }
+    }
 }

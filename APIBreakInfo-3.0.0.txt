@@ -1,0 +1,498 @@
+API BREAK INFO FOR 3.0.0
+
+You cannot use the deprecated VSCode extension to connect to the Steam app via API server now. You have to use Remote API to connect your external editors to Bitburner.
+For more information, please check the Remote API page in the Documentation tab. If you have a question, please ask us on #external-editors on Discord (https://discord.gg/TFc3hKD).
+
+
+
+The formatting functions have been moved to their own interface, ns.format.
+Each function has been replaced with their corresponding interface variant.
+Additionally, the naming of ns.tFormat has been changed to ns.format.time.
+
+Usage of the following functions may have been affected:
+ns.formatNumber
+ns.formatRam
+ns.formatPercent
+ns.tFormat
+
+Potentially affected files on server home (with line numbers):
+gang/run-gang.js: (Line numbers: 26, 27, 28, 98)
+ai/stock-master.js: (Line numbers: 82, 84, 131)
+ai/portfolio.js: (Line numbers: 37, 38, 40, 52, 53, 56, 58)
+ai/hacknet-manager.js: (Line numbers: 94, 99, 104, 109)
+pro-v1/hacknet-manager.js: (Line numbers: 49, 50, 158, 163, 171, 171)
+pro-v1/orchestrator.js: (Line number: 109)
+pro-v3/hwgw-master.js: (Line numbers: 84, 97, 98, 100, 195, 196, 225, 343)
+pro-v4/share-master.js: (Line numbers: 83, 84)
+pro-v3/hwgw-dispatcher-v2.js: (Line number: 113)
+pro-v3/hwgw-master-multi.js: (Line number: 48)
+ai/stock-master-v2.js: (Line numbers: 94, 95, 96, 110, 163, 184, 192)
+stock-master-v2.js: (Line numbers: 94, 95, 96, 110, 163, 184, 192)
+ai/stock-master-v3.js: (Line numbers: 107, 108, 109, 110, 129, 210, 235, 243)
+pro-v1/suggest-augment.js: (Line numbers: 71, 80, 81, 86)
+ai/stock-master-v4.js: (Line numbers: 86, 142, 156, 157, 158, 159)
+modules/smart-server-manager-v2.js: (Line numbers: 61, 76, 76, 83, 106, 106, 139, 139)
+pro-v3/super-hwgw.js: (Line numbers: 84, 97, 98, 100, 195, 196, 225, 343)
+ai/sell-all.js: (Line numbers: 44, 49, 95, 112, 151)
+ai/karma.js: (Line number: 5)
+pro-v1/gang-master.js: (Line numbers: 26, 27, 28, 98)
+helpers.js: (Line number: 959)
+pro-v4/dist-hwgw.js: (Line numbers: 80, 81, 113, 180, 181, 201)
+pro-v1/gang-master-med.js: (Line numbers: 31, 32, 33, 34, 107)
+pro-v3/super-hwgw-old.js: (Line numbers: 76, 77, 163, 164, 190, 289)
+pro-v4/dist-hwgw-v2.js: (Line numbers: 114, 115, 147, 262, 298)
+i/stock-master-v5.js: (Line numbers: 154, 156, 220, 235, 236, 237, 238)
+pro-v1/gang-master-rep.js: (Line numbers: 29, 30, 31, 97)
+pro-v4/xp-farm.js: (Line numbers: 80, 129)
+pro-v1/gang-master-war.js: (Line numbers: 48, 49, 52, 245)
+pro-v1/gang-hack-med.js: (Line numbers: 29, 30, 31, 33, 99)
+pro-v1/gang-hack.js: (Line numbers: 38, 39, 40, 42)
+pro-v1/gang-hack-war.js: (Line numbers: 33, 34, 35, 37, 201)
+pro-v3/hwgw-master-v3.js: (Line numbers: 247, 275, 432, 434, 448, 449, 450, 451)
+gang-hack-rep.js: (Line numbers: 29, 30, 31, 32, 98)
+pro-v4/dist-hwgw-v3.js: (Line numbers: 118, 119, 154, 267, 302)
+pro-v4/dist-hwgw-v4.js: (Line number: 70)
+pro-v1/gang-hack-rep.js: (Line numbers: 29, 30, 31, 32, 99)
+ai/auto-augments.js: (Line numbers: 90, 91, 99, 100)
+ai/auto-worker.js: (Line number: 67)
+ai/auto-pserv.js: (Line number: 41)
+scripts/buy-server.js: (Line numbers: 12, 13, 34, 34, 51, 51, 64, 68, 73, 73, 83)
+pro-v4/dist-hwgw-v4-early.js: (Line number: 90)
+pro-v4/dist-hwgw-v4-hybrid.js: (Line number: 28)
+pro-v4/dist-hwgw-v5.js: (Line numbers: 87, 94)
+ai/auto-bladeburner.js: (Line number: 56)
+
+
+
+ns.tail() was removed.
+It has been automatically replaced with "ns.ui.openTail()".
+
+ns.moveTail() was removed.
+It has been automatically replaced with "ns.ui.moveTail()".
+
+ns.resizeTail() was removed.
+It has been automatically replaced with "ns.ui.resizeTail()".
+
+ns.closeTail() was removed.
+It has been automatically replaced with "ns.ui.closeTail()".
+
+ns.setTitle() was removed.
+It has been automatically replaced with "ns.ui.setTailTitle()".
+
+Usage of the following functions may have been affected:
+ns.tail
+ns.moveTail
+ns.resizeTail
+ns.closeTail
+ns.setTitle
+
+Potentially affected files on server home (with line numbers):
+ai/stock-master.js: (Line number: 4)
+ai/hacknet-manager.js: (Line number: 5)
+pro-v1/hacknet-manager.js: (Line number: 5)
+pro-v1/orchestrator.js: (Line number: 5)
+modules/sharepower.js: (Line number: 5)
+pro-v3/hwgw-master-multi.js: (Line number: 5)
+ai/stock-master-v2.js: (Line number: 4)
+stock-master-v2.js: (Line number: 4)
+ai/stock-master-v3.js: (Line number: 4)
+pro-v1/suggest-augment.js: (Line number: 5)
+ai/stock-master-v4.js: (Line number: 4)
+pro-v3/super-hwgw-old.js: (Line number: 5)
+
+
+
+With some APIs, when you passed values to their params, you could pass a value that was not an exact match. For example, with ns.singularity.commitCrime, you could pass "Rob Store", "rob store", "RobStore", "robstore", "robStore", etc. This is called "fuzzy matching". Now, you must pass an exact value (i.e., Rob Store). This change affects:
+- Bladeburner action and type: BladeburnerActionType, BladeburnerGeneralActionName, BladeburnerContractName, BladeburnerOperationName, BladeburnerBlackOpName, SpecialBladeburnerActionTypeForSleeve, BladeburnerActionTypeForSleeve.
+- Crime: CrimeType
+- Faction work: FactionWorkType
+- University class: UniversityClassType
+- Gym stat: GymType
+- Job field: JobField
+- Stock position: PositionType
+- Stock order: OrderType
+You can access these values via ns.enums and Bladeburner APIs.
+
+
+
+ns.nuke, ns.brutessh, ns.ftpcrack, ns.relaysmtp, ns.httpworm, and ns.sqlinject now do not throw an error when you do not have the required .exe file or enough opened ports.
+This should not be a problem with most scripts. However, if you were catching errors and branching on the result of success/failure, you will need to use the return value instead.
+
+Usage of the following functions may have been affected:
+ns.nuke
+ns.brutessh
+ns.ftpcrack
+ns.relaysmtp
+ns.httpworm
+ns.sqlinject
+
+Potentially affected files on server home (with line numbers):
+hacking/worm.js: (Line numbers: 19, 20, 21, 22, 23, 49)
+ultimate-manager.js: (Line numbers: 60, 71, 72, 73, 74, 75)
+smart-manager.js: (Line numbers: 57, 58, 59, 60, 61, 64)
+ultimate-brain.js: (Line numbers: 66, 67, 68, 69, 70, 76)
+smart-brain-v2.js: (Line numbers: 134, 135, 136, 137, 138, 140)
+modules/rooter.js: (Line numbers: 5, 6, 7, 8, 9, 11)
+ai/orchestrator.js: (Line numbers: 8, 9, 10, 11, 12, 38)
+
+
+
+ns.stock.getConstants().WSEAccountCost was removed.
+It has been automatically replaced with "ns.stock.getConstants().WseAccountCost".
+
+ns.stock.getConstants().TIXAPICost was removed.
+It has been automatically replaced with "ns.stock.getConstants().TixApiCost".
+
+ns.stock.hasWSEAccount() was removed.
+It has been automatically replaced with "ns.stock.hasWseAccount()".
+
+ns.stock.hasTIXAPIAccess() was removed.
+It has been automatically replaced with "ns.stock.hasTixApiAccess()".
+
+ns.stock.has4SDataTIXAPI() was removed.
+It has been automatically replaced with "ns.stock.has4SDataTixApi()".
+
+Usage of the following functions may have been affected:
+ns.stock.getConstants().WSEAccountCost
+ns.stock.getConstants().TIXAPICost
+ns.stock.hasWSEAccount
+ns.stock.hasTIXAPIAccess
+ns.stock.has4SDataTIXAPI
+
+Potentially affected files on server home (with line numbers):
+ai/stock-master.js: (Line numbers: 7, 26)
+ai/portfolio.js: (Line number: 4)
+pro-v1/orchestrator.js: (Line numbers: 43, 61, 62, 63)
+ai/stock-master-v2.js: (Line numbers: 7, 11)
+stock-master-v2.js: (Line numbers: 7, 11)
+ai/stock-master-v3.js: (Line numbers: 7, 11)
+ai/stock-master-v4.js: (Line numbers: 6, 6)
+ai/sell-all.js: (Line number: 17)
+helpers.js: (Line numbers: 175, 176, 177)
+i/stock-master-v5.js: (Line numbers: 18, 24)
+
+
+
+ns.getBitNodeMultipliers().RepToDonateToFaction was removed.
+It has been automatically replaced with "ns.getBitNodeMultipliers().FavorToDonateToFaction".
+
+Usage of the following functions may have been affected:
+ns.getBitNodeMultipliers().RepToDonateToFaction
+
+Potentially affected files on server home (with line numbers):
+helpers.js: (Line number: 657)
+
+
+
+Some APIs returned a default value when you passed the hostname of a non-hackable server (e.g., hacknet server) to them.
+These APIs now throw an error. The affected APIs are:
+- ns.hackAnalyzeThreads
+- ns.hackAnalyze
+- ns.hackAnalyzeSecurity
+- ns.hackAnalyzeChance
+- ns.growthAnalyze
+- ns.growthAnalyzeSecurity
+- ns.nuke
+- ns.brutessh
+- ns.ftpcrack
+- ns.relaysmtp
+- ns.httpworm
+- ns.sqlinject
+- ns.getServerMoneyAvailable
+- ns.getServerSecurityLevel
+- ns.getServerBaseSecurityLevel
+- ns.getServerMinSecurityLevel
+- ns.getServerRequiredHackingLevel
+- ns.getServerMaxMoney
+- ns.getServerGrowth
+- ns.getServerNumPortsRequired
+- ns.cloud.deleteServer
+- ns.getHackTime
+- ns.getGrowTime
+- ns.getWeakenTime
+
+
+Usage of the following functions may have been affected:
+ns.hackAnalyzeThreads
+ns.hackAnalyze
+ns.hackAnalyzeSecurity
+ns.hackAnalyzeChance
+ns.growthAnalyze
+ns.growthAnalyzeSecurity
+ns.nuke
+ns.brutessh
+ns.ftpcrack
+ns.relaysmtp
+ns.httpworm
+ns.sqlinject
+ns.getServerMoneyAvailable
+ns.getServerSecurityLevel
+ns.getServerBaseSecurityLevel
+ns.getServerMinSecurityLevel
+ns.getServerRequiredHackingLevel
+ns.getServerMaxMoney
+ns.getServerGrowth
+ns.getServerNumPortsRequired
+ns.deleteServer
+ns.getHackTime
+ns.getGrowTime
+ns.getWeakenTime
+
+Potentially affected files on server home (with line numbers):
+matrixcontroller.js: (Line numbers: 5, 6, 8, 9, 12, 13, 16, 17, 17, 20, 20, 21, 21, 44, 44, 49, 49, 65, 69)
+profitfind.js: (Line numbers: 51, 55, 55, 56, 60, 61, 62, 65, 65, 78, 82, 82)
+get_stats.js: (Line numbers: 24, 59, 60, 61, 62, 89)
+scripts/get_stats.js: (Line numbers: 24, 59, 60, 61, 62, 89)
+mcp.js: (Line numbers: 62, 74, 75, 76, 76)
+gang/run-gang.js: (Line number: 90)
+hacking/worm.js: (Line numbers: 19, 20, 21, 22, 23, 43, 44, 49)
+hacking/crawler.js: (Line number: 22)
+ultimate-manager.js: (Line numbers: 58, 60, 71, 72, 73, 74, 75, 103, 151)
+hack-template.js: (Line numbers: 8, 9, 10, 11)
+best-server.js: (Line number: 14)
+best-server-by-level.js: (Line numbers: 13, 14)
+smart-manager.js: (Line numbers: 57, 58, 59, 60, 61, 63, 64, 82, 86)
+ultimate-brain.js: (Line numbers: 66, 67, 68, 69, 70, 72, 74, 76, 110, 111, 116)
+smart-brain-v2.js: (Line numbers: 78, 81, 85, 134, 135, 136, 137, 138, 140)
+hybrid-brain.js: (Line numbers: 37, 38, 40, 41, 107, 109, 110)
+godmode/server-manager.js: (Line number: 39)
+godmode/hacker.js: (Line number: 27)
+modules/target-engine.js: (Line numbers: 13, 17)
+modules/hack-engine.js: (Line numbers: 19, 20, 22, 23)
+modules/rooter.js: (Line numbers: 5, 6, 7, 8, 9, 11)
+modules/server-farm-manager.js: (Line numbers: 10, 61)
+modules/target-engine-v2.js: (Line numbers: 15, 19, 21)
+modules/server-farm-manager-single.js: (Line numbers: 10, 59)
+modules/smart-server-manager.js: (Line numbers: 25, 98)
+modules/target-selector.js: (Line numbers: 9, 13)
+modules/stock-ai.js: (Line number: 23)
+modules/augment-ai.js: (Line number: 23)
+hack/hack-template.js: (Line numbers: 8, 9, 10, 11)
+ai/stock-master.js: (Line number: 47)
+ai/hacknet-manager.js: (Line number: 25)
+pro-v1/hacknet-manager.js: (Line numbers: 162, 163)
+pro-v1/orchestrator.js: (Line number: 39)
+pro-v3/hwgw-master.js: (Line numbers: 61, 97, 119, 122, 139, 140, 140, 141, 186, 187, 190, 191, 205, 205, 249, 269, 289, 318, 319, 320)
+pro-v3/hwgw-dispatcher-v2.js: (Line numbers: 97, 98, 101, 102, 108, 108, 146, 147, 148, 166)
+pro-v3/hwgw-master-multi.js: (Line numbers: 82, 84)
+ai/stock-master-v2.js: (Line number: 83)
+stock-master-v2.js: (Line number: 83)
+ai/stock-master-v3.js: (Line numbers: 94, 189)
+pro-v1/suggest-augment.js: (Line number: 77)
+ai/stock-master-v4.js: (Line numbers: 64, 96)
+modules/smart-server-manager-v2.js: (Line number: 55)
+pro-v3/super-hwgw.js: (Line numbers: 61, 97, 119, 122, 139, 140, 140, 141, 186, 187, 190, 191, 205, 205, 249, 269, 289, 318, 319, 320)
+pro-v1/gang-master.js: (Line number: 90)
+work-for-factions.js: (Line number: 822)
+pro-v3/manager-hwgw.js: (Line numbers: 46, 49, 75, 75, 76, 76, 86, 86, 128, 128, 129, 138, 139, 140)
+pro-v4/dist-hwgw.js: (Line numbers: 53, 87, 88, 89, 169, 170, 173, 174, 185, 185, 225, 244, 264, 269, 272)
+pro-v1/gang-master-med.js: (Line number: 99)
+pro-v3/super-hwgw-old.js: (Line numbers: 76, 97, 100, 154, 155, 158, 159, 173, 173, 264, 265, 266)
+pro-v4/dist-hwgw-v2.js: (Line numbers: 98, 124, 125, 126, 250, 251, 254, 255, 266, 266, 322, 341, 363, 366, 384)
+i/stock-master-v5.js: (Line numbers: 123, 166)
+pro-v1/gang-master-rep.js: (Line number: 90)
+pro-v4/xp-farm.js: (Line numbers: 65, 66, 68, 72, 111, 126, 132, 133, 137, 141, 150, 166, 179, 180)
+pro-v1/gang-master-war.js: (Line number: 240)
+pro-v1/gang-hack-med.js: (Line number: 78)
+pro-v1/gang-hack.js: (Line number: 85)
+pro-v1/gang-hack-war.js: (Line number: 185)
+pro-v3/hwgw-master-v3.js: (Line numbers: 106, 107, 108, 109, 130, 167, 168, 182, 185, 185, 234, 235, 238, 239, 262, 270, 308, 309, 310, 316, 328, 329, 330)
+gang-hack-rep.js: (Line number: 91)
+pro-v3/hwgw-master-v4.js: (Line numbers: 160, 163, 164, 164, 179, 179, 192, 193, 195, 196, 224, 228, 228, 231, 249, 250, 251)
+pro-v3/hwgw-master-v5.js: (Line numbers: 151, 155, 157, 157, 175, 176, 178, 179, 203, 207, 207, 211, 233, 234, 235)
+pro-v3/hwgw-master-v6.js: (Line numbers: 138, 142, 142, 144, 146, 183, 184, 186, 187, 211, 215, 215, 219, 241, 242, 243)
+pro-v4/dist-hwgw-v3.js: (Line numbers: 91, 123, 124, 125, 255, 256, 259, 260, 271, 271, 326, 354, 374, 377, 394, 395, 395, 396)
+pro-v4/dist-hwgw-v4.js: (Line numbers: 85, 86, 87, 88, 104, 120, 121, 122, 164, 164, 178, 224, 226, 239, 240, 240, 241, 262, 281)
+backdoor-suck.js: (Line number: 28)
+pro-v1/gang-hack-rep.js: (Line number: 91)
+ai/auto-backdor.js: (Line number: 22)
+ai/orchestrator.js: (Line numbers: 8, 9, 10, 11, 12, 18, 37, 38)
+ai/auto-augments.js: (Line number: 65)
+ai/auto-pserv.js: (Line numbers: 12, 60)
+scripts/buy-server.js: (Line numbers: 31, 81)
+pro-v4/dist-hwgw-v4-early.js: (Line numbers: 85, 86, 87, 88, 104, 105, 107, 108, 164, 171, 172, 173, 235, 278, 303, 307, 311, 311, 312, 324, 336)
+pro-v4/dist-hwgw-v4-hybrid.js: (Line numbers: 63, 75, 95, 99, 103, 103, 105, 107)
+pro-v4/dist-hwgw-v5-engine.js: (Line numbers: 73, 74, 94, 95, 96, 113, 114, 116, 117, 144, 144, 144, 146, 151, 152, 153)
+pro-v4/dist-hwgw-v5.js: (Line numbers: 89, 90, 91, 92, 109, 110, 111, 112, 138, 152, 153, 154, 200, 244, 259, 261, 277, 277, 277, 296, 311)
+
+
+
+You have to purchase a WSE account before purchasing 4S Market Data UI access via ns.stock.purchase4SMarketData().
+Note that this change does not affect 4S Market Data TIX API access (ns.stock.purchase4SMarketDataTixApi()).
+
+Usage of the following functions may have been affected:
+purchase4SMarketData
+
+Potentially affected files on server home (with line numbers):
+ai/stockmaster-git.js: (Line numbers: 568, 574, 592)
+
+
+
+The cloud server (purchased server) functions have been moved to their own interface, ns.cloud.
+"ns.getPurchasedServerCost()" was removed.
+It has been automatically replaced with "ns.cloud.getServerCost()"
+
+"ns.purchaseServer()" was removed.
+It has been automatically replaced with "ns.cloud.purchaseServer()"
+
+"ns.getPurchasedServerUpgradeCost()" was removed.
+It has been automatically replaced with "ns.cloud.getServerUpgradeCost()"
+
+"ns.upgradePurchasedServer()" was removed.
+It has been automatically replaced with "ns.cloud.upgradeServer()"
+
+"ns.renamePurchasedServer()" was removed.
+It has been automatically replaced with "ns.cloud.renameServer()"
+
+"ns.deleteServer()" was removed.
+It has been automatically replaced with "ns.cloud.deleteServer()"
+
+"ns.getPurchasedServers()" was removed.
+It has been automatically replaced with "ns.cloud.getServerNames()"
+
+"ns.getPurchasedServerLimit()" was removed.
+It has been automatically replaced with "ns.cloud.getServerLimit()"
+
+"ns.getPurchasedServerMaxRam()" was removed.
+It has been automatically replaced with "ns.cloud.getRamLimit()"
+
+Usage of the following functions may have been affected:
+ns.getPurchasedServerCost
+ns.purchaseServer
+ns.getPurchasedServerUpgradeCost
+ns.upgradePurchasedServer
+ns.renamePurchasedServer
+ns.deleteServer
+ns.getPurchasedServers
+ns.getPurchasedServerLimit
+ns.getPurchasedServerMaxRam
+
+Potentially affected files on server home (with line numbers):
+gang/start-gang.js: (Line number: 12)
+ultimate-manager.js: (Line numbers: 144, 147, 149, 155)
+hybrid-brain.js: (Line number: 80)
+godmode/server-manager.js: (Line numbers: 19, 27, 39, 40)
+godmode/hacker.js: (Line number: 41)
+modules/server-farm-manager.js: (Line numbers: 5, 6, 8, 24, 32, 53, 61, 63, 78, 82)
+modules/server-farm-manager-single.js: (Line numbers: 5, 6, 8, 22, 30, 51, 59, 61, 77, 81)
+modules/smart-server-manager.js: (Line numbers: 28, 30, 40, 59, 90, 98, 100, 109, 113)
+pro-v3/hwgw-master.js: (Line numbers: 48, 200, 296)
+pro-v3/hwgw-dispatcher-v2.js: (Line number: 52)
+modules/smart-server-manager-v2.js: (Line numbers: 27, 95, 104, 134, 135, 138, 147, 150, 154)
+pro-v3/super-hwgw.js: (Line numbers: 48, 200, 296)
+pro-v3/super-hwgw-old.js: (Line numbers: 58, 168, 242, 248)
+pro-v3/hwgw-master-v3.js: (Line number: 197)
+ai/auto-pserv.js: (Line numbers: 28, 35, 38, 39, 41, 54, 60, 61)
+scripts/buy-server.js: (Line numbers: 11, 30, 38, 39, 49, 72, 81, 82)
+
+
+
+ns.getBitNodeMultipliers() Purchased Server properties have been renamed to CloudServers with the creation of the cloud API.
+"ns.getBitNodeMultipliers().PurchasedServerCost" was removed.
+It has been automatically replaced with "ns.getBitNodeMultipliers().CloudServerCost".
+
+"ns.getBitNodeMultipliers().PurchasedServerSoftcap" was removed.
+It has been automatically replaced with "ns.getBitNodeMultipliers().CloudServerSoftcap".
+
+"ns.getBitNodeMultipliers().PurchasedServerLimit" was removed.
+It has been automatically replaced with "ns.getBitNodeMultipliers().CloudServerLimit".
+
+"ns.getBitNodeMultipliers().PurchasedServerMaxRam" was removed.
+It has been automatically replaced with "ns.getBitNodeMultipliers().CloudServerMaxRam".
+
+Usage of the following functions may have been affected:
+ns.getBitNodeMultipliers().PurchasedServerCost
+ns.getBitNodeMultipliers().PurchasedServerSoftcap
+ns.getBitNodeMultipliers().PurchasedServerLimit
+ns.getBitNodeMultipliers().PurchasedServerMaxRam
+
+Potentially affected files on server home (with line numbers):
+helpers.js: (Line numbers: 178, 185, 186, 658, 659, 660, 661)
+
+
+
+We added a new feature called Dark Net. The "darkweb" server is a darknet server now.
+Some APIs that require the target host to be a normal server do not work with darkweb. This should not be a 
+problem with most scripts. The most potentially affected API is "ns.scan()". Darkweb does not appear in the 
+result of this API anymore. If you want to find darknet servers, you need to use "ns.dnet.probe()".
+
+
+
+Accessing the hacknet namespace incurred a one-time cost of 4 GB of RAM, and each hacknet API did not incur 
+RAM cost. Now the hacknet namespace does not incur RAM cost, but each hacknet API incurs a 0.5GB RAM cost.
+
+Usage of the following functions may have been affected:
+ns.hacknet.numNodes
+ns.hacknet.purchaseNode
+ns.hacknet.getPurchaseNodeCost
+ns.hacknet.getNodeStats
+ns.hacknet.upgradeLevel
+ns.hacknet.upgradeRam
+ns.hacknet.upgradeCore
+ns.hacknet.upgradeCache
+ns.hacknet.getLevelUpgradeCost
+ns.hacknet.getRamUpgradeCost
+ns.hacknet.getCoreUpgradeCost
+ns.hacknet.getCacheUpgradeCost
+ns.hacknet.numHashes
+ns.hacknet.hashCost
+ns.hacknet.spendHashes
+ns.hacknet.maxNumNodes
+ns.hacknet.hashCapacity
+ns.hacknet.getHashUpgrades
+ns.hacknet.getHashUpgradeLevel
+ns.hacknet.getStudyMult
+ns.hacknet.getTrainingMult
+
+Potentially affected files on server home (with line numbers):
+ai/hacknet-manager.js: (Line numbers: 15, 26, 32, 41, 51, 55, 63, 71, 92, 98, 103, 108)
+pro-v1/hacknet-manager.js: (Line numbers: 85, 90, 92, 96, 98, 102, 104, 117, 137, 139, 168)
+work-for-factions.js: (Line numbers: 583, 583, 1106, 1106)
+
+
+
+ns.cloud.purchaseServer() and ns.cloud.deleteServer() previously removed whitespace from the provided hostname inconsistently.
+They now use the hostname as provided.
+
+Usage of the following functions may have been affected:
+ns.cloud.purchaseServer
+ns.cloud.deleteServer
+
+Potentially affected files on server home (with line numbers):
+gang/start-gang.js: (Line number: 12)
+ultimate-manager.js: (Line number: 155)
+godmode/server-manager.js: (Line numbers: 27, 39, 40)
+modules/server-farm-manager.js: (Line numbers: 32, 61, 63)
+modules/server-farm-manager-single.js: (Line numbers: 30, 59, 61)
+modules/smart-server-manager.js: (Line numbers: 59, 98, 100)
+modules/smart-server-manager-v2.js: (Line number: 104)
+ai/auto-pserv.js: (Line numbers: 39, 60, 61)
+scripts/buy-server.js: (Line numbers: 49, 81, 82)
+
+
+
+ns.gang.getOtherGangInformation() was renamed to ns.gang.getAllGangInformation().
+The function was renamed because it returns information about all gangs, including the player's own gang.
+
+Usage of the following functions may have been affected:
+ns.gang.getOtherGangInformation
+
+Potentially affected files on server home (with line numbers):
+pro-v1/gang-master-war.js: (Line number: 37)
+pro-v1/gang-hack-war.js: (Line number: 27)
+
+
+
+Task objects returned from ns.singularity.getCurrentWork() and ns.sleeve.getTask() previously had an optional
+promise property named either "completion" or "nextCompletion", depending on the task.
+Now, these task objects always include this property, and it is consistently named "nextCompletion".
+
+Usage of the following functions may have been affected:
+ns.singularity.getCurrentWork
+ns.sleeve.getTask
+
+Potentially affected files on server home (with line numbers):
+helpers.js: (Line numbers: 445, 912)
+work-for-factions.js: (Line numbers: 784, 786)
+ai/orchestrator.js: (Line number: 81)
+ai/auto-worker.js: (Line number: 14)
