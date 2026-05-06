@@ -34,7 +34,7 @@ export async function main(ns) {
 
         let gangInfo = ns.gang.getGangInformation();
         let members = ns.gang.getMemberNames();
-        let others = ns.gang.getOtherGangInformation();
+        let others = ns.gang.getAllGangInformation();
 
         // ============================================================
         // DISPLAY HEADER
