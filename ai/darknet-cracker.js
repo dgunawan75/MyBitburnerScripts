@@ -82,219 +82,75 @@ export async function main(ns) {
             continue;
         }
 
-        ns.print(`   Model: ${details.modelId} | Hint: "${details.passwordHint}"`);
+        // Log SEMUA field dari details (untuk debugging & model baru)
+        ns.print(`   📋 ${JSON.stringify(details)}`);
 
         let cracked = false;
 
-        // ==============================
-        // STRATEGI: ZeroLogon
-        // Exploit: kerentanan null-auth → password kosong!
-        // ==============================
-        if (details.modelId === "ZeroLogon") {
-            const ATTEMPTS = ["", "password", "0", "0000", "12345", "null", "admin", "1234", "default"];
-            for (let pw of ATTEMPTS) {
-                ns.print(`   🔨 Mencoba password: "${pw}"`);
-                let result = await ns.dnet.authenticate(target, pw);
-                if (result.success) {
-                    ns.print(`   ✅ BERHASIL! Password = "${pw}"`);
-                    savedPasswords[target] = pw;
-                    cracked = true;
-                    break;
-                }
+        // ============================================================
+        // BANGUN DAFTAR KANDIDAT PASSWORD (Universal, semua model)
+        // ============================================================
+        let candidates = buildCandidates(ns, details);
 
-                // Gunakan heartbleed untuk petunjuk tambahan
-                try {
-                    let bleed = await ns.dnet.heartbleed(target, { peek: true });
-                    if (bleed.logs && bleed.logs.length > 0) {
-                        ns.print(`   📋 Log: ${bleed.logs.slice(-2).join(" | ")}`);
-                    }
-                } catch { }
-
-                await ns.sleep(200);
+        // Filter berdasarkan length (jika diketahui)
+        let pwLen = details.passwordLength ?? details.length ?? 0;
+        if (pwLen > 0) {
+            let exact = candidates.filter(p => String(p).length === pwLen);
+            if (exact.length > 0) {
+                ns.print(`   🎯 Filter length=${pwLen}: ${exact.length} kandidat tersisa`);
+                candidates = exact;
             }
         }
 
-        // ==============================
-        // STRATEGI: DeskMemo
-        // Hint langsung menyebutkan angka/kata rahasianya!
-        // Contoh: "The secret is 38" → coba "38"
-        // ==============================
-        else if (details.modelId.startsWith("DeskMemo")) {
-            ns.print("   📝 DeskMemo — Membaca hint untuk password...");
-            let hint = details.passwordHint || "";
-
-            // Kumpulkan semua kandidat: angka dalam hint, kata-kata kunci, lalu hint penuh
-            let numMatches = hint.match(/\d+/g) || [];
-            let wordMatches = hint.match(/\b[a-zA-Z0-9_-]{2,}\b/g) || [];
-            let attempts = [...new Set([...numMatches, ...wordMatches, hint.trim()])];
-            attempts.push("", "password", "admin");
-
-            for (let pw of attempts) {
-                ns.print(`   🔨 Mencoba: "${pw}"`);
-                let result = await ns.dnet.authenticate(target, pw);
-                if (result.success) {
-                    ns.print(`   ✅ BERHASIL! Password = "${pw}"`);
-                    savedPasswords[target] = pw;
-                    cracked = true;
-                    break;
-                }
-                await ns.sleep(200);
-            }
-
-            if (!cracked) {
-                // Coba heartbleed untuk petunjuk tambahan
-                try {
-                    let bleed = await ns.dnet.heartbleed(target, { peek: true });
-                    ns.print(`   📋 Log DeskMemo: ${JSON.stringify(bleed.logs)}`);
-                } catch { }
-            }
+        // Filter berdasarkan format
+        let fmt = (details.passwordFormat ?? details.format ?? "").toLowerCase();
+        if (fmt === "numeric") {
+            let numOnly = candidates.filter(p => /^\d+$/.test(String(p)));
+            if (numOnly.length > 0) candidates = numOnly;
+        } else if (fmt === "alpha") {
+            let alphaOnly = candidates.filter(p => /^[a-zA-Z]+$/.test(String(p)));
+            if (alphaOnly.length > 0) candidates = alphaOnly;
         }
 
-        // ==============================
-        // STRATEGI: CloudBlare (CAPTCHA angka)
-        // ==============================
-        // STRATEGI: CloudBlare (CAPTCHA angka)
-        // CARA: Ekstrak digit dari field 'data' di authDetails
-        //       → ambil sejumlah 'length' digit → itu passwordnya!
-        // Contoh: Data="6:╸\5>/1~╬*9", Length=4 → digits=[6,5,1,9] → "6519"
-        // ==============================
-        else if (details.modelId.startsWith("CloudBlare")) {
-            ns.print("   🤖 CloudBlare — Menganalisa Data field...");
-            ns.print(`   📋 Detail: ${JSON.stringify(details)}`);
+        ns.print(`   🔑 Total kandidat: ${candidates.length}`);
 
-            let password = null;
-
-            // METODE 1: Cek field 'data' dan 'passwordLength' / 'length' di details
-            let dataStr = details.data || details.passwordData || "";
-            let pwLen   = details.passwordLength || details.length || 0;
-
-            if (dataStr) {
-                let digits = dataStr.match(/\d/g) || [];
-                ns.print(`   🔢 Digit dari Data: ${digits.join("")} (ambil ${pwLen || "semua"})`);
-                if (pwLen > 0) {
-                    password = digits.slice(0, pwLen).join("");
-                } else {
-                    password = digits.join("");
-                }
+        // ============================================================
+        // COBA SEMUA KANDIDAT
+        // ============================================================
+        for (let pw of candidates) {
+            let result = await ns.dnet.authenticate(target, pw);
+            if (result.success) {
+                ns.print(`   ✅ BERHASIL! Password = "${pw}"`);
+                savedPasswords[target] = pw;
+                cracked = true;
+                break;
             }
+            await ns.sleep(150);
+        }
 
-            // METODE 2: Gunakan heartbleed untuk cari "Data:" dan "Length:" di log
-            if (!password) {
-                try {
-                    await ns.dnet.authenticate(target, "0"); // trigger log
-                    let bleed = await ns.dnet.heartbleed(target, { peek: true });
-                    let logText = (bleed.logs || []).join("\n");
-                    ns.print(`   📋 Log: ${logText.slice(0, 200)}`);
-
-                    // Cari pola "Data: <string>" dan "Length: <n>"
-                    let dataMatch  = logText.match(/Data:\s*(.+)/i);
-                    let lenMatch   = logText.match(/Length:\s*(\d+)/i);
-                    if (dataMatch) {
-                        let rawData = dataMatch[1].trim();
-                        let digits  = rawData.match(/\d/g) || [];
-                        let len     = lenMatch ? parseInt(lenMatch[1]) : digits.length;
-                        password    = digits.slice(0, len).join("");
-                        ns.print(`   🔢 Dari log — Data: "${rawData}" → password: "${password}"`);
-                    }
-                } catch (e) {
-                    ns.print(`   ⚠️ Heartbleed error: ${e}`);
-                }
-            }
-
-            // Coba password yang ditemukan
-            if (password && password.length > 0) {
-                let result = await ns.dnet.authenticate(target, password);
-                if (result.success) {
-                    ns.print(`   ✅ CAPTCHA BERHASIL! Password = "${password}"`);
-                    savedPasswords[target] = password;
-                    cracked = true;
-                } else {
-                    ns.print(`   ❌ Password "${password}" gagal. Coba variasi...`);
-                    // Coba semua sub-kombinasi digit yang ditemukan
-                    let allDigits = (dataStr || "").match(/\d/g) || [];
-                    for (let len = 1; len <= Math.min(allDigits.length, 8); len++) {
-                        let pw = allDigits.slice(0, len).join("");
-                        let r  = await ns.dnet.authenticate(target, pw);
-                        if (r.success) {
-                            ns.print(`   ✅ Variasi berhasil! Password = "${pw}"`);
+        // ============================================================
+        // FALLBACK: Heartbleed untuk petunjuk tambahan
+        // ============================================================
+        if (!cracked) {
+            try {
+                let bleed = await ns.dnet.heartbleed(target, { peek: true });
+                let logText = (bleed.logs || []).join("\n");
+                if (logText) {
+                    ns.print(`   📋 Log: ${logText.slice(0, 300)}`);
+                    // Coba ekstrak password dari log
+                    let logCandidates = buildCandidatesFromText(logText, pwLen, fmt);
+                    for (let pw of logCandidates) {
+                        let result = await ns.dnet.authenticate(target, pw);
+                        if (result.success) {
+                            ns.print(`   ✅ (dari log) BERHASIL! Password = "${pw}"`);
                             savedPasswords[target] = pw;
                             cracked = true;
                             break;
                         }
-                        await ns.sleep(200);
+                        await ns.sleep(150);
                     }
                 }
-            } else {
-                ns.print("   ⚠️ Tidak bisa ekstrak digit dari Data field. Perlu investigasi manual.");
-            }
-        }
-
-        // ==============================
-        // STRATEGI: PHP 5.4
-        // Hint: "The password is shuffled X" → coba semua permutasi digit dari X
-        // ==============================
-        else if (details.modelId.startsWith("PHP")) {
-            ns.print("   🐘 PHP model — Mencoba permutasi angka dari hint...");
-            let hint = details.passwordHint || "";
-            let numMatch = hint.match(/\d+/);
-            let candidates = [];
-
-            if (numMatch) {
-                let digits = numMatch[0].split("");
-                // Generate semua permutasi unik dari digit-digit tersebut
-                candidates = [...new Set(permute(digits).map(p => p.join("")))];
-                ns.print(`   🔢 Kandidat permutasi: ${candidates.slice(0, 10).join(", ")}`);
-            }
-            candidates.push("", "password", "admin");
-
-            for (let pw of candidates) {
-                let result = await ns.dnet.authenticate(target, pw);
-                if (result.success) {
-                    ns.print(`   ✅ BERHASIL! Password = "${pw}"`);
-                    savedPasswords[target] = pw;
-                    cracked = true;
-                    break;
-                }
-                await ns.sleep(100);
-            }
-        }
-
-        // ==============================
-        // STRATEGI: NIL
-        // Model "NIL" = null/kosong/nothing
-        // ==============================
-        else if (details.modelId === "NIL") {
-            ns.print("   🈳 NIL model — Mencoba nil/null/empty...");
-        const ATTEMPTS = ["", "nil", "null", "none", "nothing", "undefined", "password", "admin", "0000", "12345"];
-            for (let pw of ATTEMPTS) {
-                ns.print(`   🔨 Mencoba: "${pw}"`);
-                let result = await ns.dnet.authenticate(target, pw);
-                if (result.success) {
-                    ns.print(`   ✅ BERHASIL! Password = "${pw}"`);
-                    savedPasswords[target] = pw;
-                    cracked = true;
-                    break;
-                }
-                await ns.sleep(200);
-            }
-        }
-
-        // ==============================
-        // Tidak dikenal — coba umum
-        // ==============================
-        else {
-            ns.print(`   ❓ Model tidak dikenal: ${details.modelId}, coba password umum...`);
-            const COMMON = ["", "password", "admin", "1234", "0000", "12345", "root", "letmein", "default"];
-            for (let pw of COMMON) {
-                let result = await ns.dnet.authenticate(target, pw);
-                if (result.success) {
-                    ns.print(`   ✅ BERHASIL! Password = "${pw}"`);
-                    savedPasswords[target] = pw;
-                    cracked = true;
-                    break;
-                }
-                await ns.sleep(200);
-            }
+            } catch { }
         }
 
         // Jika berhasil crack → sebar probe ke lebih dalam
@@ -435,4 +291,72 @@ function parseLitForPasswords(content) {
     for (let w of commaWords) candidates.add(w);
 
     return [...candidates].filter(c => c.length > 0).slice(0, 30);
+}
+
+// =============================================================
+// UNIVERSAL CANDIDATE BUILDER — Pakai semua field dari details
+// =============================================================
+function buildCandidates(ns, details) {
+    let set = new Set();
+    const add = (v) => { if (v !== undefined && v !== null && String(v).length > 0) set.add(String(v)); };
+
+    let hint  = details.passwordHint ?? details.hint ?? "";
+    let model = details.modelId ?? "";
+    let data  = details.data ?? details.passwordData ?? "";
+    let pwLen = details.passwordLength ?? details.length ?? 0;
+
+    // 1. Pola "is X" / "PIN X" / "password X" / "secret X"
+    //    Contoh: "The password is 601" → "601"
+    let isMatch = hint.match(/(?:is|pin|secret|password|code|key)\s+([^\s,\.]{1,20})/i);
+    if (isMatch) add(isMatch[1]);
+
+    // 2. Semua angka dari hint
+    for (let n of (hint.match(/\d+/g) || [])) add(n);
+
+    // 3. Data field (CloudBlare) → ekstrak digit
+    if (data) {
+        let digits = data.match(/\d/g) || [];
+        if (digits.length > 0) {
+            add(digits.join(""));
+            if (pwLen > 0) add(digits.slice(0, pwLen).join(""));
+        }
+    }
+
+    // 4. Permutasi untuk PHP (shuffled)
+    if (model.startsWith("PHP")) {
+        let numMatch = hint.match(/\d+/);
+        if (numMatch) {
+            let perms = [...new Set(permute(numMatch[0].split("")).map(p => p.join("")))];
+            for (let p of perms) add(p);
+        }
+    }
+
+    // 5. Semua token kata dari hint
+    for (let w of (hint.match(/\b[a-zA-Z0-9_\-]{1,20}\b/g) || [])) add(w);
+
+    // 6. Keyword model-spesifik
+    if (model === "ZeroLogon") {
+        ["", "password", "0", "0000", "12345", "null", "admin", "1234", "default"].forEach(add);
+    } else if (model === "NIL") {
+        ["", "nil", "null", "none", "nothing", "undefined"].forEach(add);
+    }
+
+    // 7. Universal fallback
+    ["", "password", "admin", "0000", "12345", "1234", "root", "default"].forEach(add);
+
+    return [...set];
+}
+
+// Bangun kandidat dari teks heartbleed log
+function buildCandidatesFromText(text, pwLen, fmt) {
+    let set = new Set();
+    let isMatch = text.match(/(?:is|pin|secret|password|code|key)\s+([^\s,\.]{1,20})/gi);
+    if (isMatch) for (let m of isMatch) set.add(m.split(/\s+/).pop());
+    for (let n of (text.match(/\d+/g) || [])) set.add(n);
+    let digits = text.match(/\d/g) || [];
+    if (digits.length > 0) {
+        set.add(digits.join(""));
+        if (pwLen > 0) set.add(digits.slice(0, pwLen).join(""));
+    }
+    return [...set];
 }
