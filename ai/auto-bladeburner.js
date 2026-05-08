@@ -147,7 +147,7 @@ async function doAction(ns, type, name, logText) {
     let elapsed = 0;
     while (elapsed < time) {
         let current = ns.bladeburner.getCurrentAction();
-        if (current.name !== name) break;
+        if (!current || current.name !== name) break;
 
         await ns.sleep(1000);
         elapsed += 1000;
