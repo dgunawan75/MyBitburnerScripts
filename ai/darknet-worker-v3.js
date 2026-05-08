@@ -190,6 +190,30 @@ async function crack(ns, hostname, det) {
         }
     }
 
+    // ── OpenWebAccessPoint: Smart Parser ────────────────────────────────────
+    if (model === "OpenWebAccessPoint") {
+        let probePw = "0".repeat(pwLen > 0 ? pwLen : 3);
+        let probe = await ns.dnet.authenticate(hostname, probePw);
+        if (probe.success) return { cracked: true, password: probePw };
+        
+        if (typeof probe.data === "string") {
+            // Teks biasanya menyembunyikan "NamaKafe:Password" di tengah kalimat
+            // Contoh: "The_Depth5:592"
+            let regex = /[a-zA-Z0-9_]+:(\d+)/g;
+            let match;
+            while ((match = regex.exec(probe.data)) !== null) {
+                let pw = match[1];
+                if (pwLen === undefined || pw.length === pwLen) {
+                    let r = await ns.dnet.authenticate(hostname, pw);
+                    if (r.success) {
+                        ns.print(`   ✅ OpenWebAccessPoint cracked [${hostname}] → "${pw}"`);
+                        return { cracked: true, password: pw };
+                    }
+                }
+            }
+        }
+    }
+
     // ── Universal: coba kandidat dari hint + fallback ───────────────────────
     let candidates = buildCandidates(det, hintStr, model, pwLen);
     
