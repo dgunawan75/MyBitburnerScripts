@@ -162,7 +162,32 @@ async function crack(ns, hostname, det) {
     // ── NIL: Positional feedback (Mastermind) ───────────────────────────────
     // Error data: "yes,yesn't,yesn't,..." → per-digit correctness feedback
     if (model === "NIL") {
-        return await crackNILMastermind(ns, hostname, pwLen);
+        let probePw = "0".repeat(pwLen > 0 ? pwLen : 6);
+        let probe = await ns.dnet.authenticate(hostname, probePw);
+        if (probe.success) {
+            ns.print(`   ✅ NIL cracked [${hostname}] → "${probePw}"`);
+            return { cracked: true, password: probePw };
+        }
+        if (typeof probe.data === "string" && (probe.data.includes("yes") || probe.data.includes("yesn't"))) {
+            return await crackNILMastermind(ns, hostname, pwLen);
+        } else {
+            ns.print(`   ℹ️ NIL bukan Mastermind, menggunakan fallback/brute force...`);
+        }
+    }
+
+    // ── Pr0verFl0: Buffer Overflow Bypass ───────────────────────────────────
+    if (model === "Pr0verFl0") {
+        // Buffer besarnya dinamis (pwLen). Kita harus mengirimkan string sebesar 2x pwLen.
+        // Setengah pertama akan mengisi buffer input, setengah kedua akan meluber (overflow)
+        // dan menimpa buffer passwordExpected di memori server.
+        let baseStr = "overflow1234567890".substring(0, pwLen > 0 ? pwLen : 6);
+        let payload = baseStr + baseStr; // Contoh: jika len 6 -> "overfloverfl" (tapi overfl + overfl)
+        
+        let r = await ns.dnet.authenticate(hostname, payload);
+        if (r.success) {
+            ns.print(`   ✅ Pr0verFl0 cracked [${hostname}] → "${payload}"`);
+            return { cracked: true, password: payload };
+        }
     }
 
     // ── Universal: coba kandidat dari hint + fallback ───────────────────────
@@ -184,6 +209,17 @@ async function crack(ns, hostname, det) {
         }
         // Gunakan feedback dari response jika ada
         if (r.message) ns.print(`   📋 ${JSON.stringify({ msg: r.message, data: r.data })}`);
+        
+        // Auto-Exploit jika server membocorkan passwordExpected
+        if (r.data && typeof r.data.passwordExpected === "string") {
+            let exp = r.data.passwordExpected;
+            // Hindari infinite loop dan hindari teks sensor seperti "■■■■"
+            if (!candidates.includes(exp) && !exp.includes("■")) {
+                ns.print(`   💡 Auto-Exploit: Server membocorkan passwordExpected -> "${exp}"`);
+                candidates.push(exp);
+            }
+        }
+
         await ns.sleep(50);
     }
 
@@ -193,13 +229,14 @@ async function crack(ns, hostname, det) {
         let max = Math.pow(10, pwLen);
         for (let i = 0; i < max; i++) {
             let pw = String(i).padStart(pwLen, "0");
-            if (candidates.includes(pw)) continue; // skip yang sudah dicoba
+            if (candidates.includes(pw)) continue;
             let r = await ns.dnet.authenticate(hostname, pw);
             if (r.success) {
                 ns.print(`   ✅ Cracked [${hostname}] → "${pw}"`);
                 return { cracked: true, password: pw };
             }
-            await ns.sleep(20);
+            // Yield sesekali agar game tidak lag
+            if (i % 50 === 0) await ns.sleep(1); 
         }
     }
 
@@ -420,6 +457,32 @@ function buildCandidates(det, hintStr, model, pwLen) {
         }
     }
 
+    // Base Conversion (OctantVoxel dll)
+    if (data && typeof data === "string") {
+        let mData = data.trim().match(/^(\d+),([0-9a-zA-Z]+)$/);
+        if (mData) {
+            let base = parseInt(mData[1]);
+            let val = parseInt(mData[2], base);
+            if (!isNaN(val)) add(val);
+        }
+    }
+
+    // Roman Numerals (BellaCuore dll)
+    if (data && typeof data === "string" && /^[IVXLCDM]+$/i.test(data.trim())) {
+        const romanToInt = (s) => {
+            const roman = { 'I': 1, 'V': 5, 'X': 10, 'L': 50, 'C': 100, 'D': 500, 'M': 1000 };
+            let res = 0;
+            for (let i = 0; i < s.length; i++) {
+                let curr = roman[s[i].toUpperCase()];
+                let next = roman[s[i + 1]?.toUpperCase()];
+                if (next && curr < next) res -= curr;
+                else res += curr;
+            }
+            return res;
+        };
+        add(romanToInt(data.trim()));
+    }
+
     // Permutasi PHP
     if (model.startsWith("PHP")) {
         let nm = hintStr.match(/\d+/);
@@ -432,6 +495,7 @@ function buildCandidates(det, hintStr, model, pwLen) {
     for (let w of (hintStr.match(/\b[a-zA-Z0-9_\-]{1,20}\b/g) || [])) addIfNonEmpty(w);
 
     // Model-spesifik
+    if (model === "Laika4")    ["fido", "spot", "rover", "max", "dog", "dogs", "laika"].forEach(addIfNonEmpty);
     if (model === "NIL")       ["nil", "null", "none", "nothing", "undefined"].forEach(addIfNonEmpty);
 
     // Universal fallback (non-empty)
