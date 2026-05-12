@@ -160,19 +160,8 @@ async function crack(ns, hostname, det) {
     }
 
     // ── NIL: Positional feedback (Mastermind) ───────────────────────────────
-    // Error data: "yes,yesn't,yesn't,..." → per-digit correctness feedback
     if (model === "NIL") {
-        let probePw = "0".repeat(pwLen > 0 ? pwLen : 6);
-        let probe = await ns.dnet.authenticate(hostname, probePw);
-        if (probe.success) {
-            ns.print(`   ✅ NIL cracked [${hostname}] → "${probePw}"`);
-            return { cracked: true, password: probePw };
-        }
-        if (typeof probe.data === "string" && (probe.data.includes("yes") || probe.data.includes("yesn't"))) {
-            return await crackNILMastermind(ns, hostname, pwLen);
-        } else {
-            ns.print(`   ℹ️ NIL bukan Mastermind, menggunakan fallback/brute force...`);
-        }
+        return await crackNILMastermind(ns, hostname, pwLen);
     }
 
     // ── Pr0verFl0: Buffer Overflow Bypass ───────────────────────────────────
@@ -348,41 +337,50 @@ async function crackFactoriOs(ns, hostname, det, pwLen) {
     return { cracked: false, password: null };
 }
 
-// NIL Mastermind: pakai positional feedback "yes/yesn't" untuk solve digit per digit
+// NIL Mastermind: menebak per karakter dengan menembak angka berulang (00000, 11111, 22222)
+// Ini adalah cara paling efisien yang memetakan seluruh password maksimal dalam 10 request!
 async function crackNILMastermind(ns, hostname, pwLen) {
     if (pwLen <= 0) pwLen = 6; // fallback jika tidak diketahui
 
-    // Mulai dengan semua '0'
-    let digits = new Array(pwLen).fill("0");
+    let finalPw = new Array(pwLen).fill("0");
+    let digitsFound = 0;
 
-    for (let pos = 0; pos < pwLen; pos++) {
-        for (let d = 0; d <= 9; d++) {
-            digits[pos] = String(d);
-            let pw = digits.join("");
-            let r  = await ns.dnet.authenticate(hostname, pw);
-            if (r.success) {
-                ns.print(`   ✅ NIL Mastermind cracked [${hostname}] → "${pw}"`);
-                return { cracked: true, password: pw };
-            }
-            // Parse feedback: "yes,yesn't,yes,..."
-            let feedback = (r.data || "").split(",").map(f => f.trim());
-            if (feedback[pos] === "yes") {
-                // Digit ini benar! Lanjut ke posisi berikutnya
-                ns.print(`   🎯 NIL pos[${pos}]="${d}" ✓`);
-                break;
-            }
-            // Jika d=9 dan belum ketemu, mungkin bukan format digit murni
-            if (d === 9) ns.print(`   ⚠️ NIL pos[${pos}] tidak ditemukan digit`);
-            await ns.sleep(80);
+    for (let d = 0; d <= 9; d++) {
+        let pw = String(d).repeat(pwLen);
+        let r  = await ns.dnet.authenticate(hostname, pw);
+        if (r.success) {
+            ns.print(`   ✅ NIL Mastermind cracked [${hostname}] → "${pw}"`);
+            return { cracked: true, password: pw };
         }
+        
+        // Parse feedback: bisa berupa Array atau String "yesn't,yes,yesn't,..."
+        let feedback = [];
+        if (Array.isArray(r.data)) {
+            feedback = r.data.map(f => String(f).trim());
+        } else {
+            feedback = String(r.data || "").split(",").map(f => f.trim());
+        }
+
+        for (let i = 0; i < pwLen; i++) {
+            if (feedback[i] === "yes") {
+                finalPw[i] = String(d);
+                digitsFound++;
+                ns.print(`   🎯 NIL: Posisi [${i}] adalah '${d}'`);
+            }
+        }
+
+        // Jika semua posisi sudah terisi, tidak perlu mencoba angka berikutnya
+        if (digitsFound >= pwLen) break;
+        
+        await ns.sleep(40);
     }
 
-    // Coba hasil akhir (seharusnya sudah berhasil di dalam loop)
-    let finalPw = digits.join("");
-    let finalR  = await ns.dnet.authenticate(hostname, finalPw);
+    // Coba hasil akhir yang sudah dirangkai
+    let finalString = finalPw.join("");
+    let finalR  = await ns.dnet.authenticate(hostname, finalString);
     if (finalR.success) {
-        ns.print(`   ✅ NIL Mastermind final → "${finalPw}"`);
-        return { cracked: true, password: finalPw };
+        ns.print(`   ✅ NIL Mastermind final → "${finalString}"`);
+        return { cracked: true, password: finalString };
     }
     return { cracked: false, password: null };
 }
