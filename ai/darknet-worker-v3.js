@@ -141,14 +141,28 @@ async function crack(ns, hostname, det) {
         if (mFmt) fmt = mFmt[1].toLowerCase();
     }
 
+    // ── Length: 0 Shortcut ──────────────────────────────────────────────────
+    if (pwLen === 0) {
+        let r = await ns.dnet.authenticate(hostname, "");
+        if (r.success) {
+            ns.print(`   ✅ Blank Password cracked [${hostname}] → ""`);
+            return { cracked: true, password: "" };
+        }
+    }
+
     // ── ZeroLogon: bypass semua logika ────────────────
-    if (model === "ZeroLogon") {
-        for (let bypass of ["", "0", "0000", "empty", "null", undefined]) {
+    if (model.toUpperCase().includes("ZEROLOGON")) {
+        let bypasses = ["", "empty", "null", "nothing", undefined];
+        for (let i = 1; i <= 20; i++) bypasses.push("0".repeat(i));
+        
+        for (let bypass of bypasses) {
             let r = await ns.dnet.authenticate(hostname, bypass);
             if (r.success) {
                 ns.print(`   ✅ ZeroLogon cracked [${hostname}] → "${bypass}"`);
                 return { cracked: true, password: bypass };
             }
+            // Tampilkan log agar tidak dikira diam saja
+            if (r.message) ns.print(`   📋 ZeroLogon mencoba "${bypass}": ${r.message}`);
             await ns.sleep(20);
         }
     }
@@ -160,7 +174,7 @@ async function crack(ns, hostname, det) {
     }
 
     // ── NIL: Positional feedback (Mastermind) ───────────────────────────────
-    if (model === "NIL") {
+    if (model.toUpperCase().includes("NIL")) {
         return await crackNILMastermind(ns, hostname, pwLen);
     }
 
@@ -207,7 +221,7 @@ async function crack(ns, hostname, det) {
     let candidates = buildCandidates(det, hintStr, model, pwLen);
     
     // Strict Filtering: Hapus kandidat yang panjang/formatnya tidak sesuai
-    if (pwLen !== undefined) {
+    if (pwLen !== undefined && pwLen > 0) {
         candidates = candidates.filter(p => String(p).length === pwLen);
     }
     if (fmt === "numeric") {
@@ -342,7 +356,7 @@ async function crackFactoriOs(ns, hostname, det, pwLen) {
 async function crackNILMastermind(ns, hostname, pwLen) {
     if (pwLen <= 0) pwLen = 6; // fallback jika tidak diketahui
 
-    let finalPw = new Array(pwLen).fill("0");
+    let finalPw = new Array(pwLen).fill(null);
     let digitsFound = 0;
 
     for (let d = 0; d <= 9; d++) {
@@ -356,16 +370,18 @@ async function crackNILMastermind(ns, hostname, pwLen) {
         // Parse feedback: bisa berupa Array atau String "yesn't,yes,yesn't,..."
         let feedback = [];
         if (Array.isArray(r.data)) {
-            feedback = r.data.map(f => String(f).trim());
+            feedback = r.data.map(f => String(f).trim().toLowerCase());
         } else {
-            feedback = String(r.data || "").split(",").map(f => f.trim());
+            feedback = String(r.data || "").split(",").map(f => f.trim().toLowerCase());
         }
 
         for (let i = 0; i < pwLen; i++) {
-            if (feedback[i] === "yes") {
-                finalPw[i] = String(d);
-                digitsFound++;
-                ns.print(`   🎯 NIL: Posisi [${i}] adalah '${d}'`);
+            if (feedback[i] === "yes" || feedback[i] === "true") {
+                if (finalPw[i] === null) {
+                    finalPw[i] = String(d);
+                    digitsFound++;
+                    ns.print(`   🎯 NIL: Posisi [${i}] adalah '${d}'`);
+                }
             }
         }
 
@@ -373,6 +389,11 @@ async function crackNILMastermind(ns, hostname, pwLen) {
         if (digitsFound >= pwLen) break;
         
         await ns.sleep(40);
+    }
+
+    // Isi sisa posisi yang mungkin gagal diparsing dengan "0" (fallback)
+    for (let i = 0; i < pwLen; i++) {
+        if (finalPw[i] === null) finalPw[i] = "0";
     }
 
     // Coba hasil akhir yang sudah dirangkai
@@ -454,6 +475,11 @@ function buildCandidates(det, hintStr, model, pwLen) {
     const addIfNonEmpty = (v) => { if (v !== undefined && v !== null && String(v).length > 0) set.add(String(v)); };
 
     let data  = det.data ?? det.passwordData ?? "";
+
+    // Universal bypass strings (selalu diuji jika semuanya gagal)
+    for (let bypass of ["", "0", "0000", "empty", "null", "nothing", undefined]) {
+        add(bypass);
+    }
 
     // Pola "between X and Y"
     let btw = hintStr.match(/between\s+(\d+)\s+and\s+(\d+)/i);
