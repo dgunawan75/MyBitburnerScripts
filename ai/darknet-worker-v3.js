@@ -178,6 +178,11 @@ async function crack(ns, hostname, det) {
         return await crackNILMastermind(ns, hostname, pwLen);
     }
 
+    // ── DeepGreen: Bulls and Cows (Mastermind Classic) ──────────────────────
+    if (model.toUpperCase().includes("DEEPGREEN")) {
+        return await crackDeepGreen(ns, hostname, pwLen);
+    }
+
     // ── Pr0verFl0: Buffer Overflow Bypass ───────────────────────────────────
     if (model === "Pr0verFl0") {
         // Buffer besarnya dinamis (pwLen). Kita harus mengirimkan string sebesar 2x pwLen.
@@ -403,6 +408,92 @@ async function crackNILMastermind(ns, hostname, pwLen) {
         ns.print(`   ✅ NIL Mastermind final → "${finalString}"`);
         return { cracked: true, password: finalString };
     }
+    return { cracked: false, password: null };
+}
+
+// DeepGreen Mastermind: Bulls and Cows
+// Server mengembalikan [exact_match, wrong_place]
+async function crackDeepGreen(ns, hostname, pwLen) {
+    if (pwLen <= 0) pwLen = 3;
+
+    // Generate semua kemungkinan (karena ini numerik)
+    let candidates = [];
+    let max = Math.pow(10, pwLen);
+    for (let i = 0; i < max; i++) {
+        candidates.push(String(i).padStart(pwLen, "0"));
+    }
+
+    ns.print(`   🧠 DeepGreen solver dimulai. Total kandidat awal: ${candidates.length}`);
+
+    let attemptCount = 0;
+    while (candidates.length > 0) {
+        attemptCount++;
+        // Tebak menggunakan kandidat pertama yang tersisa
+        let guess = candidates[0];
+        let r = await ns.dnet.authenticate(hostname, guess);
+        
+        if (r.success) {
+            ns.print(`   ✅ DeepGreen cracked [${hostname}] → "${guess}" dalam ${attemptCount} percobaan`);
+            return { cracked: true, password: guess };
+        }
+
+        // Parse feedback
+        // Response biasanya berupa array dari string atau angka: ["0", "1"] atau [0, 1]
+        // data[0] = exact match (bulls)
+        // data[1] = wrong place (cows)
+        let bulls = 0, cows = 0;
+        if (Array.isArray(r.data) && r.data.length >= 2) {
+            bulls = parseInt(r.data[0]);
+            cows = parseInt(r.data[1]);
+        } else if (typeof r.data === "string") {
+            let parts = r.data.split(",");
+            if (parts.length >= 2) {
+                bulls = parseInt(parts[0]);
+                cows = parseInt(parts[1]);
+            }
+        }
+
+        ns.print(`   🎯 DeepGreen Tebak "${guess}" → Exact: ${bulls}, Wrong: ${cows} | Sisa: ${candidates.length}`);
+
+        // Fungsi bantu untuk mensimulasikan Bulls & Cows
+        const getBullsAndCows = (secret, guessCand) => {
+            let b = 0;
+            let c = 0;
+            let sArr = secret.split("");
+            let gArr = guessCand.split("");
+            
+            // Cek Bulls (posisi sama)
+            for (let i = 0; i < secret.length; i++) {
+                if (sArr[i] === gArr[i]) {
+                    b++;
+                    sArr[i] = null;
+                    gArr[i] = null;
+                }
+            }
+            
+            // Cek Cows (posisi beda)
+            for (let i = 0; i < secret.length; i++) {
+                if (gArr[i] !== null) {
+                    let matchIndex = sArr.indexOf(gArr[i]);
+                    if (matchIndex !== -1) {
+                        c++;
+                        sArr[matchIndex] = null;
+                    }
+                }
+            }
+            return [b, c];
+        };
+
+        // Filter daftar kandidat, singkirkan yang feedback-nya tidak cocok dengan tebakan barusan
+        candidates = candidates.filter(cand => {
+            let [simBulls, simCows] = getBullsAndCows(cand, guess);
+            return simBulls === bulls && simCows === cows;
+        });
+
+        await ns.sleep(40);
+    }
+
+    ns.print(`   ❌ DeepGreen gagal di ${hostname}, kehabisan kandidat!`);
     return { cracked: false, password: null };
 }
 
