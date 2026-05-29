@@ -21,7 +21,10 @@ export async function main(ns) {
     }
 
     const HAS_FORMULAS = ns.fileExists("Formulas.exe", "home");
-    const T_DELAY = 60;
+    // T_DELAY: jeda antar phase dalam 1 batch (W1→H→G→W2)
+    // 60ms terlalu agresif → desync pada server besar (omega-net, silver-helix)
+    // 100ms lebih aman, sedikit mengurangi batch per window tapi jauh lebih stabil
+    const T_DELAY = 100;
 
     // STEAL CAP adaptif: Kompensasi ScriptHackMoney rendah (BN5 = 0.2x)
     // Di BN5, pencurian lebih sedikit per thread → naikkan agresivitas steal
@@ -30,6 +33,10 @@ export async function main(ns) {
     const HACK_RAM = ns.getScriptRam("/pro-v3/payload/hack.js");
     const GROW_RAM = ns.getScriptRam("/pro-v3/payload/grow.js");
     const WEAK_RAM = ns.getScriptRam("/pro-v3/payload/weaken1.js");
+
+    // Reserve RAM home: 1% dari max RAM home (min 32GB, max 128GB)
+    // Ini mencegah home terlalu banyak dipakai untuk workers sehingga script utama tidak cukup RAM
+    const HOME_RESERVE = Math.min(128, Math.max(32, ns.getServerMaxRam("home") * 0.01));
 
     let WORKER_MODE = "all";
     let rawArgs = [...ns.args];
@@ -64,7 +71,7 @@ export async function main(ns) {
             }
         }
 
-        let totalFreeRam = calcTotalRam(ns, workers);
+        let totalFreeRam = calcTotalRam(ns, workers, HOME_RESERVE);
 
         // maxTargets adaptif RAM — semulus mungkin menyerap miliaran RAM
         let maxTargets = 1;
@@ -77,9 +84,10 @@ export async function main(ns) {
         if (totalFreeRam > 500000) maxTargets = 50;
 
         // Steal cap per loop naik seiring RAM tersedia
+        // Untuk server bernilai tinggi (>$500M), batasi steal agar grow bisa kompensasi tepat waktu
         let stealCap = BASE_STEAL_CAP;
-        if (totalFreeRam > 1000) stealCap = Math.min(BASE_STEAL_CAP * 1.5, 0.50);
-        if (totalFreeRam > 10000) stealCap = Math.min(BASE_STEAL_CAP * 2.0, 0.50);
+        if (totalFreeRam > 1000) stealCap = Math.min(BASE_STEAL_CAP * 1.5, 0.40);
+        if (totalFreeRam > 10000) stealCap = Math.min(BASE_STEAL_CAP * 2.0, 0.45);
 
         let targets = getTopTargets(ns, HAS_FORMULAS, maxTargets, BN);
 
@@ -112,7 +120,7 @@ export async function main(ns) {
 
         // Bagi RAM secara adil antar semua target yang butuh prep
         let ramPerPrepTarget = prepTargets.length > 0
-            ? Math.floor(calcTotalRam(ns, workers) / prepTargets.length)
+            ? Math.floor(calcTotalRam(ns, workers, HOME_RESERVE) / prepTargets.length)
             : 0;
 
         for (let target of prepTargets) {
@@ -128,7 +136,7 @@ export async function main(ns) {
             let needGrow   = money < maxMoney * growThreshold;
             if (!needWeaken && !needGrow) continue;
 
-            let ramSlice = Math.min(ramPerPrepTarget, calcTotalRam(ns, workers));
+            let ramSlice = Math.min(ramPerPrepTarget, calcTotalRam(ns, workers, HOME_RESERVE));
             let prepTime = performPrepCapped(ns, target, workers, needWeaken, needGrow, sec, minSec, money, maxMoney, BN, ramSlice);
             if (prepTime > 0) {
                 targetLocks[target] = now + prepTime + 500;
@@ -185,12 +193,12 @@ export async function main(ns) {
 
             let sent = 0;
             for (let b = 0; b < batches; b++) {
-                if (calcTotalRam(ns, workers) < ramPerBatch) break;
+                if (calcTotalRam(ns, workers, HOME_RESERVE) < ramPerBatch) break;
                 let off = b * T_DELAY * 4;
-                runDistributed(ns, "/pro-v3/payload/hack.js", target, batch.tHack, dH + off, b, workers);
-                runDistributed(ns, "/pro-v3/payload/weaken1.js", target, batch.tWeak1, dW1 + off, b, workers);
-                runDistributed(ns, "/pro-v3/payload/grow.js", target, batch.tGrow, dG + off, b, workers);
-                runDistributed(ns, "/pro-v3/payload/weaken2.js", target, batch.tWeak2, dW2 + off, b, workers);
+                runDistributed(ns, "/pro-v3/payload/hack.js", target, batch.tHack, dH + off, b, workers, HOME_RESERVE);
+                runDistributed(ns, "/pro-v3/payload/weaken1.js", target, batch.tWeak1, dW1 + off, b, workers, HOME_RESERVE);
+                runDistributed(ns, "/pro-v3/payload/grow.js", target, batch.tGrow, dG + off, b, workers, HOME_RESERVE);
+                runDistributed(ns, "/pro-v3/payload/weaken2.js", target, batch.tWeak2, dW2 + off, b, workers, HOME_RESERVE);
                 sent++;
             }
 
@@ -206,12 +214,12 @@ export async function main(ns) {
         // ── BACKGROUND RECOVERY: Pulihkan server depleted yang bukan top target ──
         // Server yang sudah di-hack habis tapi tidak lagi masuk top-N
         // akan dipulihkan secara perlahan menggunakan RAM yang tidak terpakai.
-        let currentFreeRam = calcTotalRam(ns, workers);
+        let currentFreeRam = calcTotalRam(ns, workers, HOME_RESERVE);
         let idleRamPct = totalFreeRam > 0 ? currentFreeRam / totalFreeRam : 0;
 
-        // Hanya jalankan recovery jika ada cukup RAM idle (>15%)
-        if (idleRamPct > 0.15) {
-            let recoveryBudget = currentFreeRam * 0.20;  // pakai maks 20% idle RAM
+        // Hanya jalankan recovery jika ada cukup RAM idle (>10%)
+        if (idleRamPct > 0.10) {
+            let recoveryBudget = currentFreeRam * 0.35;  // naik dari 20% ke 35%
             let targetSet = new Set(targets);
 
             // Scan semua server hackable yang tidak ada di target list utama
@@ -479,21 +487,28 @@ function findBestStealPercent(ns, target, totalRam, hRam, gRam, wRam, maxCap, ha
 // =============================================
 // HELPERS
 // =============================================
-function runDistributed(ns, script, target, threads, delay, batch, workers) {
-    for (let s of workers) {
+function runDistributed(ns, script, target, threads, delay, batch, workers, homeReserve) {
+    // Grow diprioritaskan ke home karena CPU cores home lebih banyak
+    // (cores meningkatkan efektivitas grow per thread)
+    const isGrow = script.includes("grow");
+    const ordered = isGrow
+        ? [...workers].sort((a, b) => (a === "home" ? -1 : b === "home" ? 1 : 0))
+        : workers;
+
+    for (let s of ordered) {
         if (threads <= 0) return;
         let free = ns.getServerMaxRam(s) - ns.getServerUsedRam(s);
-        if (s === "home") free -= 32;
+        if (s === "home") free -= (homeReserve ?? 32);
         let use = Math.min(Math.floor(free / ns.getScriptRam(script)), threads);
         if (use > 0 && ns.exec(script, s, use, target, delay, batch, Math.random()) > 0) threads -= use;
     }
 }
 
-function calcTotalRam(ns, workers) {
+function calcTotalRam(ns, workers, homeReserve) {
     let total = 0;
     for (let w of workers) {
         let free = ns.getServerMaxRam(w) - ns.getServerUsedRam(w);
-        if (w === "home") free -= 32;
+        if (w === "home") free -= (homeReserve ?? 32);
         if (free > 0) total += free;
     }
     return total;
