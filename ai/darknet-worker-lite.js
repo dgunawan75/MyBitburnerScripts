@@ -70,28 +70,126 @@ export async function main(ns) {
 async function simpleCrack(ns, hostname, details) {
     let hint  = details.passwordHint ?? details.hint ?? "";
     let model = details.modelId ?? "";
-    let pwLen = details.passwordLength ?? details.length ?? 0;
-    let fmt   = (details.passwordFormat ?? details.format ?? "").toLowerCase();
+    let pwLen = details.passwordLength ?? details.length;
+    if (pwLen === undefined) {
+        let mLen = hint.match(/length:\s*(\d+)/i);
+        if (mLen) pwLen = parseInt(mLen[1]);
+    }
+    let fmt = (details.passwordFormat ?? details.format ?? "").toLowerCase();
 
-    // Kandidat dari hint: pola "is X"
+    // ── Shortcut: Length 0 → pasti password kosong ─────────────────
+    if (pwLen === 0 || pwLen === "0") {
+        let r = await ns.dnet.authenticate(hostname, "");
+        if (r.success) return "";
+        return null; // jika Length=0 tapi kosong gagal, tidak ada yg bisa dilakukan
+    }
+
+    // ── ZeroLogon: bypass tanpa password ─────────────────────────────────────
+    if (model.toUpperCase().includes("ZEROLOGON")) {
+        for (let bypass of ["", "0", "null", "empty", "nothing", "undefined"]) {
+            let r = await ns.dnet.authenticate(hostname, bypass);
+            if (r.success) return bypass;
+            await ns.sleep(50);
+        }
+        return null;
+    }
+
+    // ── NIL Mastermind: Adaptive Probe ───────────────────────────────────────
+    // "yes" = digit tepat di posisi ini, "yesn't" = bukan posisi ini
+    // Strategi: kunci posisi yang diketahui, uji digit baru di semua posisi unknown
+    // Worst case: 10 probe saja — TIDAK perlu brute force
+    if (model.toUpperCase().includes("NIL")) {
+        let len = (pwLen > 0) ? pwLen : 6;
+        let posDigit   = new Array(len).fill(null);   // digit terkonfirmasi per posisi
+        let posExcl    = Array.from({ length: len }, () => new Set()); // digit yang BUKAN di posisi ini
+        let confirmed  = 0;
+
+        for (let d = 0; d <= 9; d++) {
+            // Kunci posisi yang sudah diketahui, uji d di posisi yang belum
+            let pw = posDigit.map(k => k !== null ? k : String(d)).join("");
+            let r  = await ns.dnet.authenticate(hostname, pw);
+            if (r.success) return pw;
+
+            // Parse feedback: "yes,yesn't,yes,..." atau array
+            let fb = [];
+            if (Array.isArray(r.data)) {
+                fb = r.data.map(x => String(x ?? "").trim().toLowerCase());
+            } else {
+                fb = String(r.data ?? "").split(",").map(x => x.trim().toLowerCase());
+            }
+
+            for (let i = 0; i < len; i++) {
+                if (posDigit[i] !== null) continue;
+                let isYes = ["yes","true","1","correct","match","hit"].includes(fb[i]);
+                if (isYes) { posDigit[i] = String(d); confirmed++; }
+                else       { posExcl[i].add(String(d)); }
+            }
+            if (confirmed >= len) break;
+            await ns.sleep(40);
+        }
+
+        // Semua posisi terkonfirmasi → coba password final
+        if (confirmed >= len) {
+            let finalPw = posDigit.join("");
+            let r = await ns.dnet.authenticate(hostname, finalPw);
+            if (r.success) return finalPw;
+        }
+
+        // Safety net: posisi yang masih unknown → brute force kandidat yang tersisa
+        let unknowns = posDigit.map((d, i) => d === null ? i : -1).filter(i => i >= 0);
+        if (unknowns.length > 0 && unknowns.length <= 3) {
+            let posCands = unknowns.map(i => {
+                let c = [];
+                for (let d = 0; d <= 9; d++) if (!posExcl[i].has(String(d))) c.push(String(d));
+                return c.length > 0 ? c : ["0","1","2","3","4","5","6","7","8","9"];
+            });
+            // Iterasi semua kombinasi
+            const idx = new Array(unknowns.length).fill(0);
+            while (true) {
+                let attempt = [...posDigit];
+                for (let j = 0; j < unknowns.length; j++) attempt[unknowns[j]] = posCands[j][idx[j]];
+                let r = await ns.dnet.authenticate(hostname, attempt.join(""));
+                if (r.success) return attempt.join("");
+                await ns.sleep(30);
+                let carry = 1;
+                for (let j = unknowns.length - 1; j >= 0 && carry; j--) {
+                    idx[j]++;
+                    if (idx[j] >= posCands[j].length) { idx[j] = 0; } else carry = 0;
+                }
+                if (carry) break;
+            }
+        }
+        return null;
+    }
+
+    // ── Kandidat dari hint + model-spesifik ──────────────────────
     let candidates = new Set();
     let isMatch = hint.match(/(?:is|pin|secret|password|code|key)\s+([^\s,\.]{1,20})/i);
     if (isMatch) candidates.add(isMatch[1]);
-    // Semua angka dari hint
+    // Angka dari hint
     for (let n of (hint.match(/\d+/g) || [])) candidates.add(n);
+    // Digit dari data (CloudBlare, dll)
+    let data = String(details.data ?? details.passwordData ?? "");
+    if (data) {
+        let digs = (data.match(/\d/g) || []).join("");
+        if (digs) candidates.add(digs);
+        if (pwLen > 0 && digs.length !== pwLen) candidates.add(digs.slice(0, pwLen));
+    }
     // Model-spesifik
-    if (model === "ZeroLogon") ["", "password", "0", "0000", "12345", "null", "admin"].forEach(c => candidates.add(c));
-    if (model === "NIL")       ["", "nil", "null", "none", "undefined"].forEach(c => candidates.add(c));
-    // Universal
-    ["", "password", "admin", "0000", "12345", "1234"].forEach(c => candidates.add(c));
+    if (model === "NIL") ["nil", "null", "none", "undefined"].forEach(c => candidates.add(c));
+    // Universal fallback
+    ["", "password", "admin", "0000", "12345", "1234", "0"].forEach(c => candidates.add(c));
 
     let list = [...candidates];
-    if (pwLen > 0) {
+
+    // Filter panjang
+    if (pwLen !== undefined && pwLen > 0) {
         let exact = list.filter(p => String(p).length === pwLen);
         if (exact.length > 0) list = exact;
     }
+    // Filter format numeric: gunakan \d* bukan \d+ agar string kosong "" tetap lolos
     if (fmt === "numeric") {
-        let nums = list.filter(p => /^\d+$/.test(String(p)));
+        let nums = list.filter(p => /^\d*$/.test(String(p)));
         if (nums.length > 0) list = nums;
     }
 

@@ -47,7 +47,16 @@ export async function main(ns) {
     ns.print(`📐 Rasio Thread: ${HACK_PER_WEAKEN} Hack : 1 Weaken`);
 
     while (true) {
-        workers = getWorkers(ns);
+        let currentWorkers = getWorkers(ns);
+        
+        // 1. Sinkronisasi payload otomatis jika ada pserv/server baru yang dibeli di tengah jalan
+        for (let s of currentWorkers) {
+            if (s !== "home" && !ns.fileExists(HACK_SCRIPT, s)) {
+                await ns.scp([HACK_SCRIPT, WEAK_SCRIPT], s, "home");
+                ns.print(`✅ Payload disalin ke server baru: ${s}`);
+            }
+        }
+        workers = currentWorkers;
 
         // Cek ulang target terbaik setiap siklus (level hack naik, target bisa berganti!)
         if (!ns.args[0]) {
@@ -55,9 +64,6 @@ export async function main(ns) {
             if (newTarget !== TARGET) {
                 ns.print(`\n🔀 TARGET XP BERGANTI: ${TARGET} → ${newTarget}`);
                 TARGET = newTarget;
-                for (let s of workers) {
-                    if (s !== "home") await ns.scp([HACK_SCRIPT, WEAK_SCRIPT], s, "home");
-                }
                 await drainServer(ns, TARGET, workers, HACK_SCRIPT, WEAK_SCRIPT);
             }
         }
@@ -77,7 +83,7 @@ export async function main(ns) {
         ns.print("=========================================");
         ns.print(`🎯 Target    : ${TARGET}`);
         ns.print(`📊 Hack Level: ${hackLvl}`);
-        ns.print(`⏱️ Hack Time  : ${ns.tFormat(hackTime)}`);
+        ns.print(`⏱️ Hack Time  : ${ns.format.time(hackTime)}`);
         ns.print(`🔒 Security  : ${sec.toFixed(2)} / ${minSec.toFixed(2)}`);
         ns.print(`✨ XP/detik  : ~${xpPerSec}`);
 
@@ -230,6 +236,13 @@ function runDistributed(ns, script, target, threadsLeft, delay, workers) {
 function getWorkers(ns) {
     let visited = new Set();
     let stack = ["home"];
+    
+    // Pastikan pserv masuk, jaga-jaga API lama
+    try {
+        let pservs = ns.getPurchasedServers();
+        for (let p of pservs) stack.push(p);
+    } catch {}
+
     while (stack.length) {
         let s = stack.pop();
         if (visited.has(s)) continue;
