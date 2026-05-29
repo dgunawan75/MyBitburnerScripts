@@ -67,11 +67,11 @@ export async function main(ns) {
 
         // maxTargets adaptif RAM — semulus mungkin menyerap miliaran RAM
         let maxTargets = 1;
-        if (totalFreeRam > 64) maxTargets = 3;
-        if (totalFreeRam > 512) maxTargets = 3;
-        if (totalFreeRam > 2000) maxTargets = 4;
-        if (totalFreeRam > 8000) maxTargets = 5;
-        if (totalFreeRam > 30000) maxTargets = 5;
+        if (totalFreeRam > 64)    maxTargets = 2;
+        if (totalFreeRam > 256)   maxTargets = 3;
+        if (totalFreeRam > 2000)  maxTargets = 4;
+        if (totalFreeRam > 8000)  maxTargets = 5;
+        if (totalFreeRam > 30000) maxTargets = 6;
 
         // Steal cap per loop naik seiring RAM tersedia
         let stealCap = BASE_STEAL_CAP;
@@ -98,7 +98,7 @@ export async function main(ns) {
         // Late-Game: Izinkan lebih banyak server melakukan prep bersamaan secara dinamis
         // 1 slot prep untuk setiap 2000 GB (2TB) RAM tersisa di jaringan
         let maxConcurrentPreps = Math.max(1, Math.floor(totalFreeRam / 2000));
-        let numPrepping = targets.filter(t => targetLocks[t] && now < targetLocks[t] && isPrepping(t, ns)).length;
+        let numPrepping = targets.filter(t => targetLocks[t] && now < targetLocks[t] && isPrepping(t, ns, workers)).length;
 
         for (let target of targets) {
             now = Date.now();
@@ -119,8 +119,6 @@ export async function main(ns) {
             let needGrow = money < maxMoney * growThreshold;
 
             if (needWeaken || needGrow) {
-                // Di early game (RAM kecil), batasi prep agar tidak rebutan. 
-                // Di late game (RAM > puluhan TB), izinkan prep massal
                 if (numPrepping >= maxConcurrentPreps) continue;
 
                 let prepTime = performPrep(ns, target, workers, needWeaken, needGrow, sec, minSec, money, maxMoney, BN);
@@ -298,7 +296,9 @@ function calculateBatch(ns, target, steal, hasFormulas, BN) {
     let actualSteal = tHack * hackPct;
     if (actualSteal > 1) actualSteal = 1;
 
-    let tWeak1 = Math.ceil((tHack * 0.002) / 0.05);
+    // BN-aware weaken threads: ServerWeakenRate mempengaruhi efek per thread
+    const weakEffect = 0.05 * (BN.ServerWeakenRate || 1);
+    let tWeak1 = Math.ceil((tHack * 0.002) / weakEffect);
     server.moneyAvailable = server.moneyMax * (1 - actualSteal);
 
     let tGrow;
@@ -309,7 +309,7 @@ function calculateBatch(ns, target, steal, hasFormulas, BN) {
         tGrow = Math.ceil(ns.growthAnalyze(target, mult) / (BN.ServerGrowthRate || 1));
     }
     tGrow = Math.ceil(tGrow * 1.05); // buffer 5%
-    let tWeak2 = Math.ceil((tGrow * 0.004) / 0.05);
+    let tWeak2 = Math.ceil((tGrow * 0.004) / weakEffect);
 
     return { tHack, tWeak1, tGrow, tWeak2, actualSteal };
 }
@@ -364,10 +364,15 @@ function filterWorkers(workers, mode) {
     return workers;
 }
 
-// Helper untuk mendeteksi apakah suatu target sedang diprep (proses bg berjalan)
-function isPrepping(target, ns) {
-    return ns.ps("home").some(p =>
-        (p.filename.includes("weaken") || p.filename.includes("grow")) &&
-        p.args.includes(target)
-    );
+// Helper untuk mendeteksi apakah suatu target sedang diprep di SEMUA workers
+function isPrepping(target, ns, workers) {
+    for (let w of workers) {
+        try {
+            if (ns.ps(w).some(p =>
+                (p.filename.includes("weaken") || p.filename.includes("grow")) &&
+                p.args.includes(target)
+            )) return true;
+        } catch { }
+    }
+    return false;
 }

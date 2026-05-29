@@ -84,14 +84,14 @@ export async function main(ns) {
 
         // --- DIAGNOSTICS (5% peluang tiap loop) ---
         if (Math.random() < 0.05) {
-            ns.print(`\n📊 [DIAGNOSTICS] RAM: ${ns.formatRam(totalFreeRam)} | Targets: TOP ${maxTargets} | Steal Cap: ${(stealCap * 100).toFixed(1)}%`);
+            ns.print(`\n📊 [DIAGNOSTICS] RAM: ${ns.format.ram(totalFreeRam)} | Targets: TOP ${maxTargets} | Steal Cap: ${(stealCap * 100).toFixed(1)}%`);
             for (let t of targets) {
                 let sec = ns.getServerSecurityLevel(t);
                 let minSec = ns.getServerMinSecurityLevel(t);
                 let money = ns.getServerMoneyAvailable(t);
                 let maxMoney = ns.getServerMaxMoney(t);
                 let rem = targetLocks[t] ? Math.max(0, Math.ceil((targetLocks[t] - Date.now()) / 1000)) : 0;
-                ns.print(`   ${t.padEnd(20)} sec:${sec.toFixed(1)}/${minSec} | $:${ns.formatNumber(money)}/${ns.formatNumber(maxMoney)} | lock:${rem}s`);
+                ns.print(`   ${t.padEnd(20)} sec:${sec.toFixed(1)}/${minSec} | $:${ns.format.number(money)}/${ns.format.number(maxMoney)} | lock:${rem}s`);
             }
         }
 
@@ -100,7 +100,7 @@ export async function main(ns) {
         // Late-Game: Izinkan lebih banyak server melakukan prep bersamaan secara dinamis
         // 1 slot prep untuk setiap 2000 GB (2TB) RAM tersisa di jaringan
         let maxConcurrentPreps = Math.max(1, Math.floor(totalFreeRam / 2000));
-        let numPrepping = targets.filter(t => targetLocks[t] && now < targetLocks[t] && isPrepping(t, ns)).length;
+        let numPrepping = targets.filter(t => targetLocks[t] && now < targetLocks[t] && isPrepping(t, ns, workers)).length;
 
         for (let target of targets) {
             now = Date.now();
@@ -300,7 +300,9 @@ function calculateBatch(ns, target, steal, hasFormulas, BN) {
     let actualSteal = tHack * hackPct;
     if (actualSteal > 1) actualSteal = 1;
 
-    let tWeak1 = Math.ceil((tHack * 0.002) / 0.05);
+    // BN-aware weaken threads: ServerWeakenRate mempengaruhi efek per thread
+    const weakEffect = 0.05 * (BN.ServerWeakenRate || 1);
+    let tWeak1 = Math.ceil((tHack * 0.002) / weakEffect);
     server.moneyAvailable = server.moneyMax * (1 - actualSteal);
 
     let tGrow;
@@ -311,7 +313,7 @@ function calculateBatch(ns, target, steal, hasFormulas, BN) {
         tGrow = Math.ceil(ns.growthAnalyze(target, mult) / (BN.ServerGrowthRate || 1));
     }
     tGrow = Math.ceil(tGrow * 1.05); // buffer 5%
-    let tWeak2 = Math.ceil((tGrow * 0.004) / 0.05);
+    let tWeak2 = Math.ceil((tGrow * 0.004) / weakEffect);
 
     return { tHack, tWeak1, tGrow, tWeak2, actualSteal };
 }
@@ -366,10 +368,15 @@ function filterWorkers(workers, mode) {
     return workers;
 }
 
-// Helper untuk mendeteksi apakah suatu target sedang diprep (proses bg berjalan)
-function isPrepping(target, ns) {
-    return ns.ps("home").some(p =>
-        (p.filename.includes("weaken") || p.filename.includes("grow")) &&
-        p.args.includes(target)
-    );
+// Helper untuk mendeteksi apakah suatu target sedang diprep di SEMUA workers
+function isPrepping(target, ns, workers) {
+    for (let w of workers) {
+        try {
+            if (ns.ps(w).some(p =>
+                (p.filename.includes("weaken") || p.filename.includes("grow")) &&
+                p.args.includes(target)
+            )) return true;
+        } catch { }
+    }
+    return false;
 }
