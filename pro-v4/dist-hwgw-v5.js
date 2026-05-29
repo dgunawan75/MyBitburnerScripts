@@ -45,7 +45,8 @@ export async function main(ns) {
     ns.print(`    StealCap : ${(BASE_STEAL_CAP * 100).toFixed(1)}%`);
     ns.print("============================================");
 
-    let targetLocks = {};
+    let targetLocks  = {};
+    let recoverLocks = {};  // lock terpisah untuk background recovery
     let initializedWorkers = new Set(["home"]);
 
     while (true) {
@@ -95,12 +96,45 @@ export async function main(ns) {
             }
         }
 
-        let now = Date.now();
+        // ── PRE-PASS: Server yang depleted (<5% money) mendapat jatah RAM dulu ───
+        // Ini mencegah phantasy-like servers memakan seluruh RAM dan menstarve server lain
+        let now = Date.now();   // deklarasi di sini, dipakai di pre-pass dan main loop
+        let prepTargets = targets.filter(t => {
+            if (targetLocks[t] && now < targetLocks[t]) return false;
+            let money = ns.getServerMoneyAvailable(t);
+            let maxMoney = ns.getServerMaxMoney(t);
+            let sec = ns.getServerSecurityLevel(t);
+            let minSec = ns.getServerMinSecurityLevel(t);
+            let secTolerance = Math.max(0.5, BN.ServerStartingSecurity * 0.3);
+            let growThreshold = Math.max(0.70, 0.95 - BN.ScriptHackMoney * 0.10);
+            return sec > minSec + secTolerance || money < maxMoney * growThreshold;
+        });
 
-        // Late-Game: Izinkan lebih banyak server melakukan prep bersamaan secara dinamis
-        // 1 slot prep untuk setiap 2000 GB (2TB) RAM tersisa di jaringan
-        let maxConcurrentPreps = Math.max(1, Math.floor(totalFreeRam / 2000));
-        let numPrepping = targets.filter(t => targetLocks[t] && now < targetLocks[t] && isPrepping(t, ns, workers)).length;
+        // Bagi RAM secara adil antar semua target yang butuh prep
+        let ramPerPrepTarget = prepTargets.length > 0
+            ? Math.floor(calcTotalRam(ns, workers) / prepTargets.length)
+            : 0;
+
+        for (let target of prepTargets) {
+            now = Date.now();
+            if (targetLocks[target] && now < targetLocks[target]) continue;
+            let minSec = ns.getServerMinSecurityLevel(target);
+            let sec    = ns.getServerSecurityLevel(target);
+            let maxMoney = ns.getServerMaxMoney(target);
+            let money    = ns.getServerMoneyAvailable(target);
+            let secTolerance = Math.max(0.5, BN.ServerStartingSecurity * 0.3);
+            let growThreshold = Math.max(0.70, 0.95 - BN.ScriptHackMoney * 0.10);
+            let needWeaken = sec > minSec + secTolerance;
+            let needGrow   = money < maxMoney * growThreshold;
+            if (!needWeaken && !needGrow) continue;
+
+            let ramSlice = Math.min(ramPerPrepTarget, calcTotalRam(ns, workers));
+            let prepTime = performPrepCapped(ns, target, workers, needWeaken, needGrow, sec, minSec, money, maxMoney, BN, ramSlice);
+            if (prepTime > 0) {
+                targetLocks[target] = now + prepTime + 500;
+                ns.print(`🛠️  PREP ${target.padEnd(18)} | RAM slice: ${ns.format.ram(ramSlice)}`);
+            }
+        }
 
         for (let target of targets) {
             now = Date.now();
@@ -112,26 +146,14 @@ export async function main(ns) {
             let money = ns.getServerMoneyAvailable(target);
 
             // BN-adaptive threshold:
-            // ServerStartingSecurity tinggi → lebih banyak weaken → toleransi lebih longgar
             let secTolerance = Math.max(0.5, BN.ServerStartingSecurity * 0.3);
-            // Grow threshold: di BN5 ServerMaxMoney 0.2x → uang lebih sedikit, toleransi lebih ketat
             let growThreshold = Math.max(0.70, 0.95 - BN.ScriptHackMoney * 0.10);
 
             let needWeaken = sec > minSec + secTolerance;
             let needGrow = money < maxMoney * growThreshold;
 
-            if (needWeaken || needGrow) {
-                // Di early game (RAM kecil), batasi prep agar tidak rebutan. 
-                // Di late game (RAM > puluhan TB), izinkan prep massal
-                if (numPrepping >= maxConcurrentPreps) continue;
-
-                let prepTime = performPrep(ns, target, workers, needWeaken, needGrow, sec, minSec, money, maxMoney, BN);
-                if (prepTime > 0) {
-                    targetLocks[target] = now + prepTime + 500;
-                    numPrepping++;
-                }
-                continue;
-            }
+            // Target yang perlu prep sudah ditangani di pre-pass, skip di sini
+            if (needWeaken || needGrow) continue;
 
             // ============ BATCH DISPATCH ============
             let networkRam = calcTotalRam(ns, workers);
@@ -181,7 +203,61 @@ export async function main(ns) {
             }
         }
 
+        // ── BACKGROUND RECOVERY: Pulihkan server depleted yang bukan top target ──
+        // Server yang sudah di-hack habis tapi tidak lagi masuk top-N
+        // akan dipulihkan secara perlahan menggunakan RAM yang tidak terpakai.
+        let currentFreeRam = calcTotalRam(ns, workers);
+        let idleRamPct = totalFreeRam > 0 ? currentFreeRam / totalFreeRam : 0;
+
+        // Hanya jalankan recovery jika ada cukup RAM idle (>15%)
+        if (idleRamPct > 0.15) {
+            let recoveryBudget = currentFreeRam * 0.20;  // pakai maks 20% idle RAM
+            let targetSet = new Set(targets);
+
+            // Scan semua server hackable yang tidak ada di target list utama
+            let allHackable = getAllHackableServers(ns);
+            let needRecovery = allHackable.filter(s => {
+                if (targetSet.has(s)) return false;  // sudah di-handle di main loop
+                let lock = recoverLocks[s];
+                if (lock && Date.now() < lock) return false;  // masih dalam recovery
+                let money = ns.getServerMoneyAvailable(s);
+                let maxMoney = ns.getServerMaxMoney(s);
+                let sec = ns.getServerSecurityLevel(s);
+                let minSec = ns.getServerMinSecurityLevel(s);
+                return money < maxMoney * 0.50 || sec > minSec + 2;  // threshold lebih longgar
+            });
+
+            // Urutkan: paling parah dulu
+            needRecovery.sort((a, b) => {
+                let pa = ns.getServerMoneyAvailable(a) / ns.getServerMaxMoney(a);
+                let pb = ns.getServerMoneyAvailable(b) / ns.getServerMaxMoney(b);
+                return pa - pb;
+            });
+
+            // Recovery untuk tiap server (satu per satu, pakai budget kecil)
+            let remainingBudget = recoveryBudget;
+            for (let s of needRecovery) {
+                if (remainingBudget < 3.5) break;  // kurang dari ~2 thread
+                let budgetPerServer = Math.min(remainingBudget / Math.max(1, needRecovery.length), remainingBudget);
+                let money  = ns.getServerMoneyAvailable(s);
+                let maxMoney = ns.getServerMaxMoney(s);
+                let minSec = ns.getServerMinSecurityLevel(s);
+                let sec    = ns.getServerSecurityLevel(s);
+                let secTolerance = Math.max(0.5, BN.ServerStartingSecurity * 0.3);
+                let growThreshold = 0.50;
+                let needW = sec > minSec + secTolerance;
+                let needG = money < maxMoney * growThreshold;
+                let rTime = performPrepCapped(ns, s, workers, needW, needG, sec, minSec, money, maxMoney, BN, budgetPerServer);
+                if (rTime > 0) {
+                    recoverLocks[s] = Date.now() + rTime + 500;
+                    remainingBudget -= budgetPerServer;
+                    ns.print(`♻️  RECOVER ${s.padEnd(16)} | ${(money/maxMoney*100).toFixed(0)}% | budget: ${ns.format.ram(budgetPerServer)}`);
+                }
+            }
+        }
+
         await ns.sleep(300);
+
     }
 }
 
@@ -244,6 +320,68 @@ function performPrep(ns, target, workers, needWeaken, needGrow, sec, minSec, mon
     return (weakSent > 0 || growSent > 0) ? ns.getWeakenTime(target) : 0;
 }
 
+// Versi performPrep dengan batas RAM (untuk fair-share multi-target prep)
+function performPrepCapped(ns, target, workers, needWeaken, needGrow, sec, minSec, money, maxMoney, BN, ramCap) {
+    const weakScript = "/pro-v3/payload/weaken1.js";
+    const growScript  = "/pro-v3/payload/grow.js";
+    const weakRam    = ns.getScriptRam(weakScript);
+    const growRam    = ns.getScriptRam(growScript);
+    const weakEffect = 0.05 * (BN.ServerWeakenRate || 1);
+
+    let weakNeeded = needWeaken ? Math.ceil((sec - minSec) / weakEffect) : 0;
+    let growNeeded = needGrow
+        ? Math.ceil(ns.growthAnalyze(target, maxMoney / Math.max(1, money)) / (BN.ServerGrowthRate || 1))
+        : 0;
+    let growWeakComp = growNeeded > 0 ? Math.ceil(growNeeded * 0.004 / weakEffect) : 0;
+    weakNeeded += growWeakComp;
+
+    let totalWeakRam = weakNeeded * weakRam;
+    let totalGrowRam = growNeeded * growRam;
+    let totalNeeded  = totalWeakRam + totalGrowRam;
+
+    let weakSent = 0, growSent = 0;
+    let ramUsed  = 0;
+
+    for (let s of workers) {
+        if (ramUsed >= ramCap) break;
+        let serverFree = ns.getServerMaxRam(s) - ns.getServerUsedRam(s);
+        if (s === "home") serverFree -= 32;
+        if (serverFree <= 0) continue;
+
+        // Batasi ke sisa jatah RAM
+        let free = Math.min(serverFree, ramCap - ramUsed);
+        if (free < Math.min(weakRam, growRam)) continue;
+
+        if (totalNeeded > 0) {
+            let weakShare = totalWeakRam > 0 ? Math.ceil(free * (totalWeakRam / totalNeeded)) : 0;
+            let growShare = free - weakShare;
+
+            if (weakSent < weakNeeded && weakShare >= weakRam) {
+                let use = Math.min(Math.floor(weakShare / weakRam), weakNeeded - weakSent);
+                if (use > 0 && ns.exec(weakScript, s, use, target, 0, "pw", Math.random()) > 0) {
+                    weakSent += use;
+                    ramUsed  += use * weakRam;
+                }
+            }
+            if (growSent < growNeeded && growShare >= growRam) {
+                let use = Math.min(Math.floor(growShare / growRam), growNeeded - growSent);
+                if (use > 0 && ns.exec(growScript, s, use, target, 0, "pg", Math.random()) > 0) {
+                    growSent += use;
+                    ramUsed  += use * growRam;
+                }
+            }
+        }
+        if (weakSent >= weakNeeded && growSent >= growNeeded) break;
+    }
+
+    let parts = [];
+    if (weakSent > 0) parts.push(`weaken ×${weakSent}/${weakNeeded}`);
+    if (growSent > 0) parts.push(`grow ×${growSent}/${growNeeded}`);
+    if (parts.length > 0) ns.print(`🛠️  PREP ${target.padEnd(18)} | ${parts.join(" + ")}`);
+
+    return (weakSent > 0 || growSent > 0) ? ns.getWeakenTime(target) : 0;
+}
+
 // =============================================
 // TARGET SCORING (BN-aware)
 // =============================================
@@ -276,6 +414,11 @@ function getTopTargets(ns, hasFormulas, limit, BN) {
         } else {
             score = (maxMoney * ns.hackAnalyzeChance(s) * ns.hackAnalyze(s) * BN.ScriptHackMoney) / ns.getWeakenTime(s);
         }
+        // Penalti depletion: server dengan money < 10% max mendapat skor dikalikan ratio aktual
+        // Ini mencegah server depleted (e.g. $7k dari $600M) tetap di top list
+        let moneyRatio = ns.getServerMoneyAvailable(s) / maxMoney;
+        if (moneyRatio < 0.10) score *= moneyRatio;  // penalti berat jika sangat depleted
+
         list.push({ s, score });
     }
     list.sort((a, b) => b.score - a.score);
@@ -379,4 +522,18 @@ function isPrepping(target, ns, workers) {
         } catch { }
     }
     return false;
+}
+
+// Scan seluruh jaringan untuk server yang bisa di-hack
+function getAllHackableServers(ns) {
+    let visited = new Set(), stack = ["home"];
+    while (stack.length) {
+        let s = stack.pop();
+        if (!visited.has(s)) { visited.add(s); ns.scan(s).forEach(n => stack.push(n)); }
+    }
+    return [...visited].filter(s =>
+        ns.hasRootAccess(s) &&
+        ns.getServerMaxMoney(s) > 0 &&
+        ns.getServerRequiredHackingLevel(s) <= ns.getHackingLevel()
+    );
 }
