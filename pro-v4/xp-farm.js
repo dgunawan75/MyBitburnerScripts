@@ -132,7 +132,7 @@ async function drainServer(ns, target, workers, hackScript, weakScript) {
     let money = ns.getServerMoneyAvailable(target);
     if (money <= 0) return;
 
-    ns.print(`\n🔵 Draining ${target} ke $0 (uang saat ini: $${ns.formatNumber(money)})...`);
+    ns.print(`\n🔵 Draining ${target} ke $0 (uang saat ini: $${ns.format.number(money)})...`);
 
     // Weaken dulu jika security tinggi supaya drain cepat
     let sec = ns.getServerSecurityLevel(target);
