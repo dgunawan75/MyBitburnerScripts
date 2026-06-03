@@ -87,8 +87,8 @@ export async function main(ns) {
         if (money >= totalCost + actualPrice) {
             totalCost += actualPrice;
             affordableOrder.push(aug);
-            let costStr = ns.formatNumber(actualPrice);
-            let baseStr = ns.formatNumber(aug.baseCost);
+            let costStr = ns.format.number(actualPrice);
+            let baseStr = ns.format.number(aug.baseCost);
             ns.print(` [${affordableOrder.length}] ${aug.name} | Harga asli: $${baseStr} -> Kena Inflasi: $${costStr}`);
         } else {
             // Uang tidak cukup. Lewati secara diam-diam dan cari augment yang lebih murah.
@@ -96,8 +96,8 @@ export async function main(ns) {
     }
 
     // 5. EKSEKUSI PEMBELIAN?
-    ns.print(`\n💰 Total Uang Anda: $${ns.formatNumber(money)}`);
-    ns.print(`💸 Estimasi Total Biaya Murni: $${ns.formatNumber(totalCost)}`);
+    ns.print(`\n💰 Total Uang Anda: $${ns.format.number(money)}`);
+    ns.print(`💸 Estimasi Total Biaya Murni: $${ns.format.number(totalCost)}`);
 
     if (affordableOrder.length > 0) {
         ns.print(`\n🔧 Jika Anda setuju dengan kalkulasi ini, script bisa membelinya secara otomatis.`);

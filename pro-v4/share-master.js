@@ -80,8 +80,8 @@ export async function main(ns) {
         ns.print(" 🔗 SHARE MASTER — GAP FILLER EDITION   ");
         ns.print(`    Mode: ${modeLabel}`);
         ns.print("=========================================");
-        ns.print(`🧵 Threads Aktif : ${ns.formatNumber(totalLaunched)}`);
-        ns.print(`💾 RAM Dipakai   : ${ns.formatRam(totalLaunched * SHARE_RAM)}`);
+        ns.print(`🧵 Threads Aktif : ${ns.format.number(totalLaunched)}`);
+        ns.print(`💾 RAM Dipakai   : ${ns.format.ram(totalLaunched * SHARE_RAM)}`);
         ns.print(`🌟 Booster Rep   : +${bonusPercent}%`);
         ns.print(`\n⏳ Refresh dalam ${CYCLE_MS / 1000}s — otomatis lepas RAM untuk HWGW`);
 
