@@ -59,8 +59,8 @@ export async function main(ns) {
         ns.print("=============================================");
         ns.print("  🏢 CORP STARTER (Lightweight)");
         ns.print("=============================================");
-        ns.print(`💰 Dana    : $${ns.formatNumber(corp.funds)}`);
-        ns.print(`📈 Revenue : $${ns.formatNumber(corp.revenue)}/s`);
+        ns.print(`💰 Dana    : $${ns.format.number(corp.funds)}`);
+        ns.print(`📈 Revenue : $${ns.format.number(corp.revenue)}/s`);
 
         // Hire karyawan baru jika ada slot kosong
         hireBasicEmployees(ns, C, AG_DIV, CITIES);
@@ -73,7 +73,7 @@ export async function main(ns) {
 
         // Info manual
         let offer = C.getInvestmentOffer();
-        ns.print(`\n💼 Investment Offer: $${ns.formatNumber(offer.funds)} (Round ${offer.round})`);
+        ns.print(`\n💼 Investment Offer: $${ns.format.number(offer.funds)} (Round ${offer.round})`);
         if (offer.funds >= 210e9) {
             ns.print("🚨 OFFER >= $210B! Pertimbangkan ACCEPT di game secara manual!");
             ns.print("   Lalu matikan script ini dan jalankan corp-master.js");
@@ -107,8 +107,15 @@ function buyBasicMaterials(ns, C, divName, cities, funds) {
     let buyPerSec = 10; // Beli 10 unit/detik (konservatif)
 
     for (let city of cities) {
-        for (let [mat, _] of Object.entries(targets)) {
-            try { C.buyMaterial(divName, city, mat, buyPerSec); } catch { }
+        for (let [mat, targetQty] of Object.entries(targets)) {
+            try {
+                let current = C.getMaterial(divName, city, mat).stored;
+                if (current < targetQty) {
+                    C.buyMaterial(divName, city, mat, buyPerSec);
+                } else {
+                    C.buyMaterial(divName, city, mat, 0); // Hentikan pembelian jika sudah cukup
+                }
+            } catch { }
         }
     }
 }

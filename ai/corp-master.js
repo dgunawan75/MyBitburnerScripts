@@ -12,8 +12,18 @@ export async function main(ns) {
 
     const C = ns.corporation; // shorthand
 
-    const CORP_NAME = "NativeStar Corp";
-    const AG_DIV = "Agro";     // Nama divisi Agriculture
+    const CORP_NAME = "Aurolive";
+    let AG_DIV = "Agro";     // Nama divisi Agriculture (default)
+    if (C.hasCorporation()) {
+        for (let divName of C.getCorporation().divisions) {
+            try {
+                if (C.getDivision(divName).type === "Agriculture") {
+                    AG_DIV = divName;
+                    break;
+                }
+            } catch { }
+        }
+    }
     const TOB_DIV = "Smokeware"; // Nama divisi Tobacco
     const CITIES = ["Aevum", "Chongqing", "Sector-12", "New Tokyo", "Ishima", "Volhaven"];
 
@@ -46,7 +56,7 @@ export async function main(ns) {
     }
 
     // ============================================================
-    // LANGKAH 2: Buka Divisi Agriculture
+    // LANGKAH 2: Buka Divisi Agriculture (di satu kota awal)
     // ============================================================
     let corpData = C.getCorporation();
     if (!corpData.divisions.includes(AG_DIV)) {
@@ -55,37 +65,26 @@ export async function main(ns) {
         await ns.sleep(500);
     }
 
-    // ============================================================
-    // LANGKAH 3: Ekspansi ke semua 6 kota
-    // ============================================================
     let div = C.getDivision(AG_DIV);
-    for (let city of CITIES) {
-        if (!div.cities.includes(city)) {
-            ns.print(`🗺️ Ekspansi ke ${city}...`);
-            C.expandCity(AG_DIV, city);
-            await ns.sleep(200);
-        }
-    }
+    let startCity = div.cities[0]; // Kota awal/markas besar (biasanya Sector-12)
 
     // ============================================================
-    // LANGKAH 4: Beli Warehouse di semua kota
+    // LANGKAH 3: Beli Warehouse di kota awal saja
     // ============================================================
-    for (let city of CITIES) {
-        try {
-            let wh = C.getWarehouse(AG_DIV, city);
-            if (!wh) {
-                ns.print(`📦 Beli Warehouse di ${city}...`);
-                C.purchaseWarehouse(AG_DIV, city);
-            }
-        } catch {
-            ns.print(`📦 Beli Warehouse di ${city}...`);
-            C.purchaseWarehouse(AG_DIV, city);
+    try {
+        let wh = C.getWarehouse(AG_DIV, startCity);
+        if (!wh) {
+            ns.print(`📦 Beli Warehouse di ${startCity}...`);
+            C.purchaseWarehouse(AG_DIV, startCity);
         }
-        await ns.sleep(100);
+    } catch {
+        ns.print(`📦 Beli Warehouse di ${startCity}...`);
+        C.purchaseWarehouse(AG_DIV, startCity);
     }
+    await ns.sleep(200);
 
     // ============================================================
-    // LANGKAH 5: Unlock Smart Supply (prioritas!)
+    // LANGKAH 4: Unlock Smart Supply (prioritas!)
     // ============================================================
     try {
         const smartSupplyCost = C.getUnlockCost("Smart Supply");
@@ -106,48 +105,76 @@ export async function main(ns) {
 
         ns.clearLog();
         let corp = C.getCorporation();
+        let offer = C.getInvestmentOffer();
+
+        // Deteksi fase otomatis berdasarkan round investasi saat ini
+        if (offer.round === 2) {
+            phase = 2;
+        } else if (offer.round >= 3) {
+            phase = 3;
+        }
+
         let revenue = corp.revenue;
         let funds = corp.funds;
+
+        // Tentukan kota aktif (hanya kota awal di Fase 1, ekspansi ke semua kota di Fase 2+)
+        let activeCities = [startCity];
+        if (phase >= 2) {
+            let currentDiv = C.getDivision(AG_DIV);
+            for (let city of CITIES) {
+                if (!currentDiv.cities.includes(city)) {
+                    if (funds >= 150e6) { // Biaya ekspansi $150M
+                        ns.print(`🗺️ Ekspansi ke ${city}...`);
+                        try {
+                            C.expandCity(AG_DIV, city);
+                            C.purchaseWarehouse(AG_DIV, city);
+                            funds -= 150e6;
+                        } catch { }
+                    }
+                }
+            }
+            activeCities = C.getDivision(AG_DIV).cities;
+        }
 
         ns.print("=============================================");
         ns.print("  🏢 CORP MASTER - FASE " + phase);
         ns.print("=============================================");
-        ns.print(`💰 Dana      : $${ns.formatNumber(funds)}`);
-        ns.print(`📈 Revenue   : $${ns.formatNumber(revenue)}/s`);
+        ns.print(`💰 Dana      : $${ns.format.number(funds)}`);
+        ns.print(`📈 Revenue   : $${ns.format.number(revenue)}/s`);
         ns.print(`🏭 Divisi    : ${corp.divisions.join(", ")}`);
+        ns.print(`🏙️ Kota Aktif : ${activeCities.join(", ")}`);
 
         // --- Smart Supply per kota ---
-        for (let city of CITIES) {
+        for (let city of activeCities) {
             try {
                 C.setSmartSupply(AG_DIV, city, true);
             } catch { /* Belum unlock atau sudah aktif */ }
         }
 
         // --- Set Sell Price otomatis ---
-        setSellPrices(ns, C, AG_DIV, CITIES);
+        setSellPrices(ns, C, AG_DIV, activeCities);
 
         // --- Hire & assign karyawan ---
-        manageEmployees(ns, C, AG_DIV, CITIES, phase);
+        manageEmployees(ns, C, AG_DIV, activeCities, phase);
 
         // --- Upgrade Warehouse ---
-        upgradeWarehouses(ns, C, AG_DIV, CITIES, funds, phase);
+        funds = upgradeWarehouses(ns, C, AG_DIV, activeCities, funds, phase);
 
         // --- Beli Upgrade Corp ---
-        buyCorporateUpgrades(ns, C, funds);
+        funds = buyCorporateUpgrades(ns, C, funds);
 
         // --- Beli Material Produksi ---
         let matTarget = phase >= 2 ? MAT_PHASE2 : MAT_PHASE1;
-        await buyProductionMaterials(ns, C, AG_DIV, CITIES, matTarget);
+        buyProductionMaterials(ns, C, AG_DIV, activeCities, matTarget);
 
         // --- Cek Investment ---
-        let offer = C.getInvestmentOffer();
         if (phase === 1 && offer.funds >= INVEST_R1_MIN) {
-            ns.print(`\n🤝 ACCEPT INVESTMENT ROUND 1! ($${ns.formatNumber(offer.funds)})`);
+            ns.print(`\n🤝 ACCEPT INVESTMENT ROUND 1! ($${ns.format.number(offer.funds)})`);
             C.acceptInvestmentOffer();
             phase = 2;
             ns.print("🚀 MASUK FASE 2! Mulai skalakan Agriculture lebih besar.");
         } else if (phase === 2 && offer.funds >= INVEST_R2_MIN) {
-            ns.print(`\n🤝 ACCEPT INVESTMENT ROUND 2! ($${ns.formatNumber(offer.funds)})`);
+            ns.print(`\n🤝 ACCEPT INVESTMENT ROUND 2! ($${ns.format.number(offer.funds)})`);
             C.acceptInvestmentOffer();
             phase = 3;
         }
@@ -160,8 +187,8 @@ export async function main(ns) {
         // Info investment target
         if (phase < 3) {
             let target = phase === 1 ? INVEST_R1_MIN : INVEST_R2_MIN;
-            ns.print(`\n⏳ Menunggu Offer ≥ $${ns.formatNumber(target)}`);
-            ns.print(`   Offer saat ini: $${ns.formatNumber(offer.funds)} (Round ${offer.round})`);
+            ns.print(`\n⏳ Menunggu Offer ≥ $${ns.format.number(target)}`);
+            ns.print(`   Offer saat ini: $${ns.format.number(offer.funds)} (Round ${offer.round})`);
         }
     }
 }
@@ -212,15 +239,15 @@ function manageEmployees(ns, C, divName, cities, phase) {
                 } catch { break; }
             }
 
-            // Auto-assign karyawan (pakai API baru jika ada)
+            // Auto-assign karyawan
             try {
-                C.setAutoJobAssignment(divName, city, "Operations", target["Operations"] || 0);
-                C.setAutoJobAssignment(divName, city, "Engineer", target["Engineer"] || 0);
-                C.setAutoJobAssignment(divName, city, "Business", target["Business"] || 0);
-                C.setAutoJobAssignment(divName, city, "Management", target["Management"] || 0);
-                C.setAutoJobAssignment(divName, city, "Research & Development", target["Research & Development"] || 0);
-            } catch {
-                /* API lama — skip auto assignment */
+                C.setJobAssignment(divName, city, "Operations", target["Operations"] || 0);
+                C.setJobAssignment(divName, city, "Engineer", target["Engineer"] || 0);
+                C.setJobAssignment(divName, city, "Business", target["Business"] || 0);
+                C.setJobAssignment(divName, city, "Management", target["Management"] || 0);
+                C.setJobAssignment(divName, city, "Research & Development", target["Research & Development"] || 0);
+            } catch (e) {
+                ns.print(`⚠️ ERROR Assigning jobs in ${city}: ${e}`);
             }
         } catch { /* Skip kota yang belum siap */ }
     }
@@ -243,6 +270,7 @@ function upgradeWarehouses(ns, C, divName, cities, funds, phase) {
             }
         } catch { }
     }
+    return funds;
 }
 
 // ============================================================
@@ -264,40 +292,44 @@ function buyCorporateUpgrades(ns, C, funds) {
     for (let upg of PRIORITY_UPGRADES) {
         try {
             let cost = C.getUpgradeLevelCost(upg);
+            ns.print(`🔍 Upgrade ${upg}: Cost $${ns.format.number(cost)} (Safety: $${ns.format.number(cost * 2)}) | Funds: $${ns.format.number(funds)}`);
             if (funds >= cost * 2) { // Beli jika punya 2× lipat biaya (safety)
-                C.buyUpgrade(upg);
+                C.levelUpgrade(upg);
                 funds -= cost;
+                ns.print(`✅ Bought ${upg}!`);
             }
-        } catch { }
+        } catch (e) {
+            ns.print(`⚠️ ERROR Buying upgrade ${upg}: ${e}`);
+        }
     }
+    return funds;
 }
 
 // ============================================================
 // HELPER: Beli Material Produksi (Pulse Buy per tick)
 // ============================================================
-async function buyProductionMaterials(ns, C, divName, cities, targets) {
+function buyProductionMaterials(ns, C, divName, cities, targets) {
     for (let city of cities) {
         for (let [mat, targetQty] of Object.entries(targets)) {
             try {
-                let current = C.getMaterial(divName, city, mat).qty;
+                let current = C.getMaterial(divName, city, mat).stored;
                 if (current < targetQty * 0.95) {
                     let needed = targetQty - current;
                     let buyPerSec = needed / 10; // 1 tick = 10 detik
                     C.buyMaterial(divName, city, mat, buyPerSec);
+                    C.sellMaterial(divName, city, mat, 0, "MP"); // Hentikan penjualan jika kurang
+                } else if (current > targetQty * 1.05) {
+                    let excess = current - targetQty;
+                    let sellPerSec = excess / 10; // Jual selisihnya dalam 1 tick (10 detik)
+                    C.buyMaterial(divName, city, mat, 0); // Hentikan pembelian
+                    C.sellMaterial(divName, city, mat, sellPerSec, "MP"); // Jual kelebihan
                 } else {
-                    C.buyMaterial(divName, city, mat, 0); // Stop beli jika sudah cukup
+                    C.buyMaterial(divName, city, mat, 0); // Stop beli jika pas
+                    C.sellMaterial(divName, city, mat, 0, "MP"); // Stop jual jika pas
                 }
-            } catch { }
-        }
-    }
-
-    // Tunggu 1 tick agar pembelian terealisasi
-    await ns.sleep(10000);
-
-    // Stop semua pembelian
-    for (let city of cities) {
-        for (let mat of Object.keys(targets)) {
-            try { C.buyMaterial(divName, city, mat, 0); } catch { }
+            } catch (e) {
+                ns.print(`⚠️ ERROR (${city} - ${mat}): ${e}`);
+            }
         }
     }
 }
